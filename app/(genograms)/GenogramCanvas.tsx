@@ -34,28 +34,71 @@ export default function GenogramCanvas({ data }: Props) {
 
     return [...nodes].sort((a, b) => {
       const getWeight = (node: GenogramNode) => {
+        const nodeIdNum = parseInt(node.id.replace(/[^0-9]/g, '')) || 0;
         // --- 1. 대상자 세대 (Level 0) ---
         if (node.relLevel === 0) {
-          if (node.isProband) return 100; // 대상자 정중앙
-          
-          // 대상자와의 관계 확인
+          // 1. 대상자 (Proband) 고정 기준점
+          if (node.isProband) return 100;
+
+          // --- 배우자 관계 로직 시작 ---
           const famWithProband = data.families.find(f => 
             (f.fatherId === proband.id || f.motherId === proband.id) && 
             (f.fatherId === node.id || f.motherId === node.id)
           );
 
           if (famWithProband) {
-            // 현재 결혼 상태(married)면 오른쪽으로 (120)
+            // 2. 가장 최근 또는 현재 배우자 (married)
             if (famWithProband.relationshipType === 'married') return 120;
             
-            // 이혼(divorced) 상태면 왼쪽으로 (50 + 가족번호)
-            // 가족 번호가 낮을수록(옛날 결혼일수록) 더 왼쪽으로 배치됨
+            // 3. 대상자의 전 배우자 (divorced 등)
+            // 오래된 순서대로 왼쪽(50~99)에 배치하기 위해 가족 번호를 차감/가산
             const famNum = parseInt(famWithProband.id.replace(/[^0-9]/g, '')) || 0;
             return 50 + famNum; 
           }
 
-          // 전 배우자 및 형제들 처리
-          return node.gender === 'male' ? 80 : 120;
+          // 4 & 5. 대상자의 현재 배우자가 재혼인 경우, 그 배우자의 전 파트너 처리
+          // 현재 배우자(120)의 전 배우자는 그보다 우측(130~140)으로 배치
+          const currentSpouseFam = data.families.find(f => 
+            (f.fatherId === proband.id || f.motherId === proband.id) && f.relationshipType === 'married'
+          );
+          const currentSpouseId = currentSpouseFam?.fatherId === proband.id ? currentSpouseFam?.motherId : currentSpouseFam?.fatherId;
+          
+          if (currentSpouseId) {
+            const famWithCurrentSpouse = data.families.find(f => 
+              (f.fatherId === currentSpouseId || f.motherId === currentSpouseId) && 
+              (f.fatherId === node.id || f.motherId === node.id) &&
+              f.id !== currentSpouseFam?.id // 현재 대상자와의 결혼은 제외
+            );
+            if (famWithCurrentSpouse) {
+              const famNum = parseInt(famWithCurrentSpouse.id.replace(/[^0-9]/g, '')) || 0;
+              return 130 + famNum; 
+            }
+          }
+
+          // 6. 형제 및 형제의 배우자 처리
+          // 형제들의 부모 가족(F2 등)을 공유하는 인물들
+          const probandParentsFam = data.families.find(f => f.childrenIds.includes(proband.id));
+          const isSibling = probandParentsFam?.childrenIds.includes(node.id);
+
+          if (isSibling) {
+            // 형제는 ID 순서대로 구역(150~)에 배치
+            return 150 + nodeIdNum;
+          }
+
+          // 형제의 배우자 (해당 형제의 ID 바로 옆에 붙임)
+          const famAsInLaw = data.families.find(f => 
+            (f.fatherId === node.id || f.motherId === node.id) &&
+            probandParentsFam?.childrenIds.some(sibId => f.fatherId === sibId || f.motherId === sibId)
+          );
+          
+          if (famAsInLaw) {
+            const siblingId = famAsInLaw.fatherId === node.id ? famAsInLaw.motherId : famAsInLaw.fatherId;
+            const siblingIdNum = parseInt(siblingId?.replace(/[^0-9]/g, '') || '0');
+            // 형제의 ID값에 0.5를 더해 바로 오른쪽(150 + ID + 0.5)에 배치
+            return 150 + siblingIdNum + 0.5;
+          }
+
+          return 500 + nodeIdNum; // 기타 인물
         }
 
         // --- 2. 부모 세대 (Level < 0) ---
