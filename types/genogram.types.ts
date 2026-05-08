@@ -22,6 +22,7 @@ export interface GenogramNode {
     notes?: string;
     [key: string]: any;
   };
+  canvasPosition?: { x: number; y: number }; // 렌더링 시 계산된 위치
 }
 
 export interface FamilyUnit {

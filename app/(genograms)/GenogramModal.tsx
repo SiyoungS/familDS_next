@@ -2,7 +2,7 @@
 
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { GenogramData } from '@/types/genogram.types';
+import { BWGenogramData } from '@/types/bowengenogram.types';
 import GenogramCanvas from './GenogramCanvas'; // 실제 그림을 그릴 컴포넌트
 
 export default function GenogramModal() {
@@ -11,7 +11,7 @@ export default function GenogramModal() {
   const show = searchParams.get('showGenogram') === 'true';
   const counselTarget = searchParams.get('target') || '';
   const counselText = searchParams.get('text') || '';
-  const [data, setData] = useState<GenogramData | null>(null);
+  const [data, setData] = useState<BWGenogramData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -22,11 +22,13 @@ export default function GenogramModal() {
       }
       console.log('Counsel Target for Genogram:', counselTarget); // 디버깅용 로그
       console.log('Counsel Text for Genogram:', counselText); // 디버깅용 로그
-      fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ counselText: counselText, counselTarget: counselTarget })
-      })
+      const flag = false;
+      if (!flag) {
+        fetch('/api/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ counselText: counselText, counselTarget: counselTarget })
+        })
         .then(res => {
           if (!res.ok) throw new Error('데이터 생성 실패');
           console.log('Raw response from /api/generate:', res); // 디버깅용 로그
@@ -40,10 +42,12 @@ export default function GenogramModal() {
           router.back();
         })
         .finally(() => setIsLoading(false));
-      // fetch('/api/mock-genogram') 
-      //   .then(res => res.json())
-      //   .then(setData)
-      //   .finally(() => setIsLoading(false));
+      } else {
+        fetch('/api/mock-genogram')
+          .then(res => res.json())
+          .then(setData)
+          .finally(() => setIsLoading(false));
+      }
     }
   }, [show]);
 
