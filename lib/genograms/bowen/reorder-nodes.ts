@@ -41,8 +41,16 @@ export function reorderDisplayOrders(data: BWGenogramData): BWGenogramData {
     // 타겟이 자녀로 속한 FamilyUnit 찾기
     const originFamily = familyUnits.find(fu => fu.children_ids.includes(targetId));
     if (!originFamily) return [];
-
-    const siblings = originFamily.children_ids; // 이미 나이순 정렬됨
+    // children_ids가 birth_order에 맞게 재정렬 (나이순 정렬)
+    const siblings = originFamily.children_ids.sort((idA,idB) => {
+      const nodeA = nodes.find(p => p.id === idA);
+      const nodeB = nodes.find(p => p.id === idB);
+      const idA_birthOrder = nodeA ? nodeA.attributes.birth_order : 0;
+      const idB_birthOrder = nodeB ? nodeB.attributes.birth_order : 0;
+      return idA_birthOrder - idB_birthOrder;
+    }).map(p => p);
+    console.log(`siblings[id: ${targetId}] : ${siblings}`);
+    // const siblings = originFamily.children_ids;
     return siblings;
   };
 
