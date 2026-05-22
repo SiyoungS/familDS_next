@@ -42,7 +42,7 @@ export const calculateNodePositions = (data: GenogramData): PositionedGenogramNo
       if (absA === absB) return a - b; // 예: -1세대가 1세대보다 먼저 오도록 유지
       return absA - absB;
     });
-
+  
   const maxNodesInRelLevel = Math.max(...Object.values(levelCounts));
   const minY = Math.min(...data.nodes.map(n => n.relLevel));
 

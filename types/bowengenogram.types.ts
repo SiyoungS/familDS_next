@@ -1,5 +1,3 @@
-// types/bowen-genogram.types.ts
-
 // 보웬 가계도 데이터의 최상위 구조
 export interface BWGenogramData {
   nodes: PersonNode[];
@@ -19,19 +17,20 @@ export interface PersonNode {
   id: string;
   name: string;
   gender: 'male' | 'female' | 'unknown' | 'pet'; // 반려동물(마름모) 추가
-  type: 'person' | 'fetus'; // 태아(삼각형) 추가
+  // 태아, 유산, 낙태 등 기호 분리
+  type: 'person' | 'fetus' | 'miscarriage' | 'abortion' | 'stillbirth';
   
   attributes: {
-    is_ip: boolean; // 내담자 본인: 중심인물(이중 테두리, 배경색)
+    is_ip: boolean; // 내담자 본인: 중심인물(이중 테두리)
     is_spouse_of_ip: boolean; // 내담자의 배우자
     is_deceased: boolean;   // 사망(X 표시)
+    death_cause?: string; // 사망 원인(암, 사고 등)
     
-    // 성적 지향 및 성전환 (이미지 좌측 하단 반영)
+    // 성적 지향 및 성전환 
     orientation?: 'homosexual' | 'bisexual'; // 기호 안 역삼각형
     transgender?: 'm_to_f' | 'f_to_m';       // 기호 안의 기호
     
-    // 질병 및 중독 상태 (이미지 우측 상세 반영)
-    // SVG에서 4등분 또는 2등분 색칠을 결정하는 데이터
+    // 질병 및 중독 상태 - SVG에서 4등분 또는 2등분 색칠을 결정하는 데이터
     health_status?: {
       physical_mental_illness: boolean;    // 신체적·정신적 질병 (좌측 절반 색칠)
       illness_recovery: boolean;           // 질병 호전 (우측 상단 1/4 색칠)
@@ -42,8 +41,12 @@ export interface PersonNode {
 
     birth_date?: string;    // 기호 왼쪽 위
     death_date?: string;    // 기호 오른쪽 위
-    birth_order: number;    // 가계도 가족단위 내에서 children의 출생 순서. 없으면 null. 태아도 null.
     age?: number;           // 기호 안쪽
+
+    birth_order: number;    // 가계도 가족단위 내에서 children의 출생 순서. 없으면 null. 태아도 null.
+
+    // 현재 어떤 유닛에 속해있는가를 알려주는 아이디.
+    primary_family_unit_id?: string; // 레이아웃의 중심이 되는 가족 단위 ID
   };
   relLevel: number; // 세대 및 상대적 위치 
   generation: number;
@@ -56,21 +59,9 @@ export interface PersonNode {
 
 // 인물 간의 관계(링크) 정보
 export interface RelationshipLink {
+  id: string; // 관계 정보 ID
   from: string; // 시작 인물 ID
   to: string;   // 대상 인물 ID
-  
-  // 법적/생물학적 상태 (주로 부부/부모-자녀 관계선 모양 결정)
-  legal_status: 
-
-    | 'married'    // 실선
-    | 'divorced'   // 실선 위 사선 2개
-    | 'separated'  // 실선 위 사선 1개
-
-    | 'common_law' // 점선
-    | 'parent_child' // 수직 연결선
-    | 'foster'       // 위탁 양육 (외부 기관 연결 등)
-    | 'guardianship' // 법적 후견 관계 (조부모, 친척 등이 법적 보호자일 때)
-    | 'null';
 
   // 보웬의 핵심: 정서적 역동 (선의 스타일 결정)
   emotional_status: 
@@ -83,7 +74,9 @@ export interface RelationshipLink {
     | 'distant'           // 가는 점선 (소원함)
     | 'cut_off'           // 중간이 끊긴 선 (단절)
     | 'triangle';         // 삼각관계 (필요 시 별도 로직)
-    
+  
+    // 입양/위탁 - 선 스타일
+  special_type?: 'adopted' | 'foster';
   metadata?: {
     date?: string;        // 결혼/이혼 시기 등
     description?: string; // 추가 설명
@@ -92,9 +85,19 @@ export interface RelationshipLink {
 export interface FamilyUnit {
   id: string; // "FU1", "FU2" 등
   parent_ids: string[]; // [부, 모] 또는 [파트너1, 파트너2]
-  children_ids: string[]; // 출생 순서대로 정렬된 자녀들의 ID 배열
+  childGroups: ChildGroup[]; // 출생 순서대로 정렬된 자녀들의 ID 배열
   legal_status: 'married' | 'divorced' | 'separated' | 'common_law' | 'null';
+  
+  marriage_order: number;   
   marriage_year?: number;
+  divorce_year?: number;
+
+  // 레이아웃 엔진용: 부부 연결 수평선의 중심 좌표
+  lineCenterPosition?: { x: number; y: number };
+}
+export interface ChildGroup {
+  child_ids: string[];
+  type: 'normal' | 'identical_twins' | 'fraternal_twins' | 'triplets';
 }
 /**
  * 동거 가족 범위를 표시하기 위한 그룹
@@ -103,4 +106,5 @@ export interface HouseholdGroup {
   id: string;
   members: string[]; // 포함된 PersonNode ID 목록
   label?: string;    // 예: "현재 함께 거주"
+  stroke_style: 'dashed' | 'solid'; // 경계선 스타일
 }

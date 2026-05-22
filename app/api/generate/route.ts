@@ -1,15 +1,26 @@
 import { NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import { getSystemPrompt_old, getSystemPrompt_bowen } from '@/lib/prompt-loader';
+import { getSystemPrompt_bowen } from '@/lib/prompt-loader';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
+import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
-
+const getThisYear = (timezoneOffset:number) => {
+  const now = new Date(); 
+  const utc = now.getTime() + (now.getTimezoneOffset()*60*1000);
+  const selectedDate = new Date(utc - (timezoneOffset*60*1000));
+  const year = selectedDate.getFullYear();
+  return year;
+}
 export async function POST(req: Request) {
   const { counselText, counselTarget } = await req.json();
-  const systemPrompt = getSystemPrompt_bowen();
+  const timezoneOffset = new Date().getTimezoneOffset();
+  console.log(`timezoneOffset : ${timezoneOffset}`);
+  const thisYear = getThisYear(timezoneOffset);
+  console.log(`thisYear : ${thisYear}`);
+  const systemPrompt = getSystemPrompt_bowen().replace("{--TEXT_THIS_YEAR--}", thisYear.toString());
 
   try {
     const response = await openai.chat.completions.create({
@@ -24,7 +35,8 @@ export async function POST(req: Request) {
     });
     const rawContent = response.choices[0].message.content!;
     const rawData = JSON.parse(rawContent);
-    const processedData = reorderDisplayOrders(rawData);
+    const orderedData = reorderDisplayOrders(rawData);
+    const processedData = calculateGenogramLayout(orderedData);
     console.log('Processed Genogram Data:', JSON.stringify(processedData));// 디버깅용 로그
     return NextResponse.json(processedData);
   } catch (error) {
