@@ -24,3 +24,14 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.main-page-svgs {
+  
+  .line-main { stroke: #40c4aa; stroke-width: 1.5; opacity: 0.7; stroke-linecap: round; }
+  .line-thin { stroke: #52d2b9; stroke-width: 0.6; opacity: 0.45; stroke-linecap: round; }
+  .node-large { fill: #39bfa5; opacity: 0.95; }
+  .node-medium { fill: #48cbb2; opacity: 0.9; }
+  .node-small { fill: #5ce0c7; opacity: 0.85; }
+  .node-tiny { fill: #7bf2db; opacity: 0.8; }
+  
+}

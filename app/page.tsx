@@ -1,5 +1,6 @@
 'use client';
 
+import RelationAnalysisPage from '@/components/MainPageScreen';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -21,8 +22,9 @@ export default function Home() {
     const encodedTarget = encodeURIComponent(counselTarget);
     router.push(`?showGenogram=true&target=${encodedTarget}&text=${encodedText}`);
   };
-
   return (
+    <>
+    <RelationAnalysisPage />
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black min-h-screen">
       <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black sm:items-start border-x border-zinc-100 dark:border-zinc-800">
         
@@ -66,5 +68,9 @@ export default function Home() {
 
       </main>
     </div>
-  );
+    </>
+  )
+  // return (
+    
+  // );
 }
