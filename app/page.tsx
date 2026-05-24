@@ -1,76 +1,122 @@
 'use client';
 
-import RelationAnalysisPage from '@/components/MainPageScreen';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import AnalysisEnginePage from '@/components/AnalysisEnginePage';
+import RelationAnalysisPage from '@/components/RelationAnalysisPage';
+import { BWGenogramData } from '@/types/bowengenogram.types';
+import { JSX, useState } from 'react';
+import GenogramCanvas from './(genograms)/GenogramCanvas';
+import RelationAnalysisCenterCard, { cardVariantsInit, cardVariants } from '@/components/RelationAnalysisCenterCard';
+import { Variants } from 'framer-motion';
 
 export default function Home() {
-  const router = useRouter();
+  const [cardVariant, setCardVariant] = useState<Variants>(cardVariantsInit);
   const [counselTarget, setCounselTarget] = useState(''); 
   const [counselText, setCounselText] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [analysisStep, setAnalysisStep] = useState<'input' | 'analyzing' | 'results' >('input');
 
-  const handleOpenGenogram = () => {
+  const [data, setData] = useState<BWGenogramData | null>(null);
+  
+  const [toastMessageList, setToastMessageList] = useState<Record<string, JSX.Element>>({});
+  const toastMessageElement = (message:string) => {
+    return (
+      <div className="fixed bottom-5 left-5 z-50 bg-gray-900/95 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-2.5 animate-bounce-horizontal border border-white/10 backdrop-blur-md">
+        <span className="text-[#10b981] font-bold">💡 시스템 알림:</span>
+        <span className="text-xs font-medium">{message}</span>
+      </div>
+    )
+  }
+  const addToastMessage = (msg:string) => {
+    const uniqueKey = `${msg}-${Date.now()}`;
+    setToastMessageList({ 
+      [uniqueKey]: toastMessageElement(msg) 
+    });
+    setTimeout(() => {
+      setToastMessageList(prev => {
+        const newToastMessages = { ...prev };
+        delete newToastMessages[uniqueKey];
+        return newToastMessages;
+      });
+    }, 3000);
+  }
+
+  const handleAnalyze = (resultType:'genogram' | 'ecomap' | 'report') => {
+    if (resultType !== 'genogram') {
+      addToastMessage('현재는 가계도 분석만 지원됩니다. 곧 다른 분석 기능도 제공할 예정이니 조금만 기다려주세요!');
+      return;
+    }
     if (!counselTarget.trim()) {
-      alert('상담 대상을 입력해주세요.');
+      addToastMessage('상담 대상을 입력해주세요.');
       return;
     }
     if (!counselText.trim()) {
-      alert('상담 내용을 입력해주세요.');
+      addToastMessage('상담 내용을 입력해주세요.');
       return;
     }
-    const encodedText = encodeURIComponent(counselText);
-    const encodedTarget = encodeURIComponent(counselTarget);
-    router.push(`?showGenogram=true&target=${encodedTarget}&text=${encodedText}`);
+    const useLocalJsonData = false;
+    setAnalysisStep('analyzing');
+    if (!useLocalJsonData) {
+      fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ counselText: counselText, counselTarget: counselTarget })
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('데이터 생성 실패');
+        console.log('Raw response from /api/generate:', res); // 디버깅용 로그
+        return res.json();
+      })
+      .then(setData)
+      .catch(err => {
+        console.error(err);
+        addToastMessage('가계도 생성에 실패했습니다. 다시 시도해주세요.');
+      })
+      .finally(() => setAnalysisStep('results'));
+    } else {
+      fetch('/api/mock-genogram')
+        .then(res => res.json())
+        .then(setData)
+        .finally(() => setAnalysisStep('results'));
+    }
+  };
+  const handleReset = () => {
+    setCounselText('');
+    setCounselTarget('');
+    setAnalysisStep('input');
+    setCardVariant(cardVariants);
   };
   return (
-    <>
-    <RelationAnalysisPage />
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black min-h-screen">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-center py-32 px-16 bg-white dark:bg-black sm:items-start border-x border-zinc-100 dark:border-zinc-800">
-        
-        <div className="space-y-4 w-full text-center sm:text-left">
-          <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-50">
-            심리 상담 시스템
-          </h1>
-          <p className="text-zinc-500 dark:text-zinc-400">
-            아래 버튼을 클릭하여 내담자의 가족 관계도(Genogram)를 확인하세요.
-          </p>
-          <div className='flex flex-row w-full '>
-            <input 
-              type="text" 
-              value={counselTarget}
-              
-              onChange={(e) => setCounselTarget(e.target.value)}
-              placeholder={`띄어쓰기 없이 이름을 입력해주세요. 예: 홍길동`}
-              className="flex-1 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 outline-none" 
-            />
-          </div>
-          <div className='flex flex-row w-full '>
-            <input 
-              type="text" 
-              value={counselText}
-              onChange={(e) => setCounselText(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleOpenGenogram()} // 엔터키 지원
-              placeholder="예: 30대 여성, 남편과 아들이 있고 현재 둘째 임신 중..." 
-              className="flex-1 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm text-zinc-900 shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-50 outline-none" 
-            />
-          </div>
-          
-          <div className="pt-4">
-            <button
-              onClick={handleOpenGenogram}
-              className="rounded-full bg-blue-600 px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-blue-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 transition-all active:scale-95"
-            >
-              가계도 생성 및 확인
-            </button>
-          </div>
-        </div>
+    <div className="relative w-full h-screen bg-[#ffffff] overflow-hidden font-sans select-none flex">
+     
+      <RelationAnalysisPage isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
+      children={
+        (analysisStep === 'results' && data) ? (
+          <GenogramCanvas data={data} />
+        ) : <RelationAnalysisCenterCard 
+        isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
+        variants={cardVariant}
+        />
+      }
+      />
+      <AnalysisEnginePage 
+        isMenuOpen={isMenuOpen}
+        setIsMenuOpen={setIsMenuOpen}
+        // IP 이름
+        counselTarget={counselTarget}
+        setCounselTarget={setCounselTarget}
+        // 상담 내용
+        counselText={counselText}
+        setCounselText={setCounselText}
 
-      </main>
+        analysisStep={analysisStep}
+        setAnalysisStep={setAnalysisStep}
+        handleReset={handleReset}
+        handleAnalyze={handleAnalyze}
+      />
+      
+      {Object.keys(toastMessageList).length > 0 && (
+        Object.values(toastMessageList)[0]
+      )}
     </div>
-    </>
   )
-  // return (
-    
-  // );
 }

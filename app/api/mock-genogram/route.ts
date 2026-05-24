@@ -4,6 +4,8 @@ import path from 'path';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
 import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
 
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function GET() {
   try {
     const filePath = path.join(process.cwd(), 'lib', 'mockdata_2.jsonl');
@@ -11,7 +13,7 @@ export async function GET() {
     const testEnv = process.env.TEST_ENV || 'default';
     console.log(`Current TEST_ENV: ${testEnv}`);
 
-    
+    await delay(2000);
     // JSON 파싱 시도
     const rawData = JSON.parse(fileContent);
     const orderedData = reorderDisplayOrders(rawData);

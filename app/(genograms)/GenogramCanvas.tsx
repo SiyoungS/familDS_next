@@ -205,7 +205,10 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   };
 
   return (
-    <div className="w-full h-full flex justify-center bg-white p-4 overflow-auto border rounded-xl">
+    <div className="
+    relative z-10 
+    w-full h-full 
+    flex justify-center bg-white p-4 overflow-auto border rounded-xl">
       <svg 
         width={processedData.canvasSize.width} 
         height={processedData.canvasSize.height}
@@ -213,7 +216,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         className="block"
       >
         {/* 전체 양수 변환이 끝났으므로 과도한 기본 마진 제거, 레이어 컨테이너 구성 */}
-        <g transform="translate(0, 0)">
+        <g >
           {renderRelationships()}
           
           {processedData.nodes.map((node) => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { circlePositions, getRandomDelay, linePositions } from '@/lib/ralation-analysis-pages/motion-variants';
-import { motion, scale, Variants } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 
 // animation variants
 const rootContainerVariants: Variants = {
@@ -11,30 +11,12 @@ const rootContainerVariants: Variants = {
     transition: { delayChildren: 0.5 },
   },
 };
-const cardVariants:Variants = {
-  hidden: { opacity: 0, scale: 0 },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    transition: {
-      duration: 0.8,
-      delay: 1.5
-    }
-  }
-};
-const lineVariants: Variants = {
-  hidden: { pathLength: 0, opacity: 0 },
-  visible: {
-    pathLength: 1,
-    opacity: 1,
-    transition: { 
-      duration: 1, 
-      ease: "easeInOut", 
-      delay: getRandomDelay(0.5, 1)
-    }
-  }
-};
-export default function RelationAnalysisPage() {
+
+export default function RelationAnalysisPage(props: {
+  isMenuOpen: boolean;
+  setIsMenuOpen: (open: boolean) => void;
+  children?: React.ReactNode;
+}) {
 
   return (
     <motion.div 
@@ -98,30 +80,7 @@ export default function RelationAnalysisPage() {
           </g>
         </svg>
       </div>
-
-      {/* 중앙 카드 대시보드 */}
-
-      <motion.div 
-      variants={cardVariants}
-      className="relative z-10 w-full max-w-85 rounded-3xl bg-white/10 p-10 
-        shadow-[0_10px_35px_rgba(0,0,0,0.03)] 
-        border border-white/20 
-        backdrop-blur-sm flex flex-col items-center text-center">
-        <div className="mb-5 text-[#00c7ae]">
-          <svg className="h-7 w-7 fill-current" viewBox="0 0 24 24">
-            <path d="M12 2L14.8 9.2L22 12L14.8 14.8L12 22L9.2 14.8L2 12L9.2 9.2L12 2Z" />
-          </svg>
-        </div>
-
-        <h2 className="text-2xl font-bold text-gray-900 mb-3 tracking-tight">
-          AI 관계망 분석
-        </h2>
-        
-        <p className="text-[15px] leading-relaxed text-gray-400 font-medium tracking-tight">
-          상담 데이터를 기반으로 <br />
-          가계도와 생태도를 생성합니다.
-        </p>
-      </motion.div>
+      {props.children}
     </motion.div>
   );
 }
