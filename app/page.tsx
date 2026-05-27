@@ -4,11 +4,13 @@ import AnalysisEnginePage from '@/components/AnalysisEnginePage';
 import RelationAnalysisPage from '@/components/RelationAnalysisPage';
 import { BWGenogramData } from '@/types/bowengenogram.types';
 import { JSX, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import GenogramCanvas from './(genograms)/GenogramCanvas';
 import RelationAnalysisCenterCard, { cardVariantsInit, cardVariants } from '@/components/RelationAnalysisCenterCard';
 import { Variants } from 'framer-motion';
 
 export default function Home() {
+  const router = useRouter();
   const [cardVariant, setCardVariant] = useState<Variants>(cardVariantsInit);
   const [counselTarget, setCounselTarget] = useState(''); 
   const [counselText, setCounselText] = useState('');
@@ -87,7 +89,15 @@ export default function Home() {
   };
   return (
     <div className="relative w-full h-screen bg-[#ffffff] overflow-hidden font-sans select-none flex">
-     
+      <div className="absolute right-6 top-6 z-50">
+        <button
+          type="button"
+          onClick={() => router.push('/auth/login')}
+          className="rounded-2xl border border-[#d1d5db] bg-white px-5 py-2 text-sm font-semibold text-[#111827] shadow-sm transition hover:border-[#10b981] hover:text-[#10b981]"
+        >
+          로그인
+        </button>
+      </div>
       <RelationAnalysisPage isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
       children={
         (analysisStep === 'results' && data) ? (
