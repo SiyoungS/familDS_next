@@ -17,7 +17,7 @@ export async function GET() {
     // JSON 파싱 시도
     const rawData = JSON.parse(fileContent);
     const orderedData = reorderDisplayOrders(rawData);
-        const processedData = calculateGenogramLayout(orderedData);
+    const processedData = calculateGenogramLayout(orderedData);
     console.log('Processed Genogram Data:', JSON.stringify(processedData, null, 2));// 디버깅용 로그
     return NextResponse.json(processedData);
   } catch (error) {

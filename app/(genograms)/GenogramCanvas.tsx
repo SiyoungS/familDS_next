@@ -51,12 +51,16 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         
         // 정렬 엔진이 계산해 둔 "ㄷ"자 결합선 허브 좌표 활용
         coupleMidX = unit.lineCenterPosition.x;
-        
+
         const hasInterruption = processedData.nodes.some(n => 
           n.relLevel === parents[0].node?.relLevel && 
           n.layoutPosition.x > Math.min(p1.x, p2.x) && n.layoutPosition.x < Math.max(p1.x, p2.x) &&
           !unit.parent_ids.includes(n.id)
         );
+        const interruptionNode = processedData.nodes.find(n => {
+          n.layoutPosition.x > Math.min(p1.x, p2.x) && n.layoutPosition.x < Math.max(p1.x, p2.x) &&
+          n.layoutPosition.y 
+        })
         const currentDepth = hasInterruption ? marriageLineDepth + 150 : marriageLineDepth;
         coupleBottomY = unit.lineCenterPosition.y + currentDepth;
         // 부부 "ㄷ"자 수평선 긋기 (노드 하단 마진 25px 확보 후 아래로 꺾임)
@@ -126,10 +130,60 @@ export default function GenogramCanvas({ data: initialData }: Props) {
             strokeWidth="2"
           />
         );
+        // 자녀 수평바의 min/max X
+        let xCoords:number[] = [];
+        
+
+        // 각 자녀 노드 머리 위로 수직 하강하는 꺾임선 연결
+        // (단, 쌍둥이 그룹인 경우 분기점이 달라지는 특수 규칙 적용)
+        let processedTwinIds = new Set<string>();
+
+        (unit.childGroups || []).forEach((group, gIdx) => {
+          if (group.type === 'identical_twins' || group.type === 'fraternal_twins') {
+            // 쌍둥이 처리: 가로 분기선에서 하나의 점에서 출발해 V자로 갈라짐
+            const twinNodes = group.child_ids.map(id => ({ id, pos: nodePositions[id] })).filter(t => t.pos);
+            if (twinNodes.length === 2) {
+              const twinMidX = (twinNodes[0].pos.x + twinNodes[1].pos.x) / 2;
+              
+              xCoords.push(twinMidX); // 자녀 수평바의 X 좌표로 활용
+
+              // 공통점에서 각 쌍둥이 노드 머리 위(-25px)까지 V자로 연결
+              elements.push(
+                <line key={`twin-v1-${unit.id}-${gIdx}`} x1={twinMidX} y1={childBranchY} x2={twinNodes[0].pos.x} y2={twinNodes[0].pos.y - 25} stroke="#333" strokeWidth="2" />,
+                <line key={`twin-v2-${unit.id}-${gIdx}`} x1={twinMidX} y1={childBranchY} x2={twinNodes[1].pos.x} y2={twinNodes[1].pos.y - 25} stroke="#333" strokeWidth="2" />
+              );
+
+              // 일란성(identical) 쌍둥이인 경우 두 사선 사이를 연결하는 수평 가로선 추가 (보웬 규칙)
+              if (group.type === 'identical_twins') {
+                const innerY = childBranchY + 30; // V자 중간 높이 계산
+                // 두 자녀 X 좌표의 내분점을 활용한 짧은 링킹 바
+                elements.push(
+                  <line key={`twin-identical-bar-${unit.id}-${gIdx}`} x1={twinNodes[0].pos.x} y1={twinNodes[0].pos.y - 25} x2={twinNodes[1].pos.x} y2={twinNodes[1].pos.y - 25} stroke="#333" strokeWidth="2" />
+                );
+              }
+              group.child_ids.forEach(id => processedTwinIds.add(id));
+            }
+          }
+        });
+
+        // 쌍둥이가 아닌 일반 자녀들의 표준 수직선 매핑
+        childNodesWithPos.forEach((child, cIdx) => {
+          if (!child.pos || processedTwinIds.has(child.id)) return;
+          xCoords.push(child.pos.x); // 자녀 수평바의 X 좌표로 활용
+          elements.push(
+            <line
+              key={`child-v-${unit.id}-${cIdx}`}
+              x1={child.pos.x} y1={childBranchY}
+              x2={child.pos.x} y2={child.pos.y - 25}
+              stroke="#333"
+              strokeWidth="2"
+            />
+          );
+        });
 
         // 자녀가 2명 이상일 때 가로로 길게 뻗는 수평 바(Bar) 렌더링
         if (childNodesWithPos.length >= 2) {
-          const xCoords = childNodesWithPos.map(c => c.pos?.x).filter(x => x !== undefined) as number[];
+          // const xCoords = childNodesWithPos.map(c => c.pos?.x).filter(x => x !== undefined) as number[];
           
           if (xCoords.length > 0) {
             const minChildX = Math.min(...xCoords);
@@ -147,57 +201,6 @@ export default function GenogramCanvas({ data: initialData }: Props) {
             );
           }
         }
-
-        // 각 자녀 노드 머리 위로 수직 하강하는 꺾임선 연결
-        // (단, 쌍둥이 그룹인 경우 분기점이 달라지는 특수 규칙 적용)
-        let processedTwinIds = new Set<string>();
-
-        (unit.childGroups || []).forEach((group, gIdx) => {
-          if (group.type === 'identical_twins' || group.type === 'fraternal_twins') {
-            // 쌍둥이 처리: 가로 분기선에서 하나의 점에서 출발해 V자로 갈라짐
-            const twinNodes = group.child_ids.map(id => ({ id, pos: nodePositions[id] })).filter(t => t.pos);
-            if (twinNodes.length === 2) {
-              const twinMidX = (twinNodes[0].pos.x + twinNodes[1].pos.x) / 2;
-              
-              // 가로 바에서 쌍둥이 공통 출발점까지 내리는 선
-              elements.push(
-                <line key={`twin-stem-${unit.id}-${gIdx}`} x1={twinMidX} y1={childBranchY} x2={twinMidX} y2={childBranchY + 20} stroke="#333" strokeWidth="2" />
-              );
-              // 공통점에서 각 쌍둥이 노드 머리 위(-25px)까지 V자로 연결
-              elements.push(
-                <line key={`twin-v1-${unit.id}-${gIdx}`} x1={twinMidX} y1={childBranchY + 20} x2={twinNodes[0].pos.x} y2={twinNodes[0].pos.y - 25} stroke="#333" strokeWidth="2" />,
-                <line key={`twin-v2-${unit.id}-${gIdx}`} x1={twinMidX} y1={childBranchY + 20} x2={twinNodes[1].pos.x} y2={twinNodes[1].pos.y - 25} stroke="#333" strokeWidth="2" />
-              );
-
-              // 일란성(identical) 쌍둥이인 경우 두 사선 사이를 연결하는 수평 가로선 추가 (보웬 규칙)
-              if (group.type === 'identical_twins') {
-                const innerY = childBranchY + 30; // V자 중간 높이 계산
-                // 두 자녀 X 좌표의 내분점을 활용한 짧은 링킹 바
-                const ratio = 0.4;
-                const x1 = twinMidX + (twinNodes[0].pos.x - twinMidX) * ratio;
-                const x2 = twinMidX + (twinNodes[1].pos.x - twinMidX) * ratio;
-                elements.push(
-                  <line key={`twin-identical-bar-${unit.id}-${gIdx}`} x1={x1} y1={innerY} x2={x2} y2={innerY} stroke="#333" strokeWidth="2" />
-                );
-              }
-              group.child_ids.forEach(id => processedTwinIds.add(id));
-            }
-          }
-        });
-
-        // 쌍둥이가 아닌 일반 자녀들의 표준 수직선 매핑
-        childNodesWithPos.forEach((child, cIdx) => {
-          if (!child.pos || processedTwinIds.has(child.id)) return;
-          elements.push(
-            <line
-              key={`child-v-${unit.id}-${cIdx}`}
-              x1={child.pos.x} y1={childBranchY}
-              x2={child.pos.x} y2={child.pos.y - 25}
-              stroke="#333"
-              strokeWidth="2"
-            />
-          );
-        });
       }
     });
 

@@ -57,13 +57,65 @@ export function calculateGenogramLayout(
   const totalGenerations = maxLevel - minLevel + 1;
 
   // ==========================================
-  // [단계 1] 모든 노드의 세대별 Y축 상대좌표 기본 지정
+  // [단계 1] 모든 노드의 세대별 Y축 상대좌표 기본 지정 (세대 간격 기본값 설정)
   // ==========================================
   levels.forEach(level => {
     const group = levelGroups[level];
-    const yPos = level * config.levelHeightGap;
+    let yPos = level * config.levelHeightGap;
     group.forEach(node => {
       node.layoutPosition = { x: 0, y: Math.round(yPos) };
+      console.log(`node ${node.id} relLevel ${node.relLevel} initial layoutPosition: `, node.layoutPosition);
+    });
+  });
+  
+  familyUnits.forEach((unit) => {
+    const parents = nodes.filter(n => unit.parent_ids.includes(n.id));
+    if (parents.length === 0) return;
+    
+    // 부모들의 Y 좌표 
+    const parentY = parents[0].layoutPosition.y;
+    const maxParentY = Math.max(...parents.map(p => p.layoutPosition.y));
+
+    const parentsGroup = levelGroups[parents[0].relLevel].sort((a, b) => a.display_order - b.display_order);
+    // 같은 세대 내 부모 사이에 낀 노드
+    const firstParentIndex = parentsGroup.findIndex(p => p.id === parents[0].id);
+    const lastParentIndex = parentsGroup.findIndex(p => p.id === parents[1]?.id);
+    const minParentIndex = Math.min(firstParentIndex, lastParentIndex);
+    const maxParentIndex = Math.max(firstParentIndex, lastParentIndex);
+    const betweenParents: PersonNode[] = parentsGroup.map((n,i) => {
+      if (i > minParentIndex && i < maxParentIndex) return n;
+    }).filter((v): v is NonNullable<typeof v> => !!v);
+    console.log("betweenParents: ", betweenParents.map(n => n.id));
+    let otherBetweenUnitsCount = 0;
+    let betweenUnitMaxY = 0;
+    betweenParents.forEach(n => {
+      // 자식이 있는 경우에만 카운팅
+      const otherBetweenUnit = familyUnits.filter(u => 
+        u.parent_ids.includes(n.id) 
+        && u.parent_ids.some(id => parents.some(p => p.id === id))
+        && u.id !== unit.id
+        && u.childGroups.length > 0
+      );
+      if (otherBetweenUnit.length > 0) {
+        const unitMaxY = Math.max(
+          ...otherBetweenUnit.flatMap(u => u.childGroups?.flatMap(g => g.child_ids).map(id => nodes.find(n => n.id === id)?.layoutPosition.y).filter((v): v is number => !!v) || [])
+        )-160;
+        betweenUnitMaxY = Math.max(betweenUnitMaxY, unitMaxY);
+        otherBetweenUnitsCount++;
+      }
+    })
+    unit.lineY = betweenUnitMaxY;
+    console.log(`FamilyUnit ${unit.id} has ${otherBetweenUnitsCount} other units between parents.`);
+    
+    const childY = parentY  + ((otherBetweenUnitsCount+1)*config.levelHeightGap);
+
+    unit.childGroups.forEach(group => {
+      group.child_ids.forEach(childId => {
+        const child = nodes.find(n => n.id === childId);
+        if (child && child.relLevel > 0) {
+          child.layoutPosition.y = childY;
+        }
+      });
     });
   });
 
@@ -85,8 +137,9 @@ export function calculateGenogramLayout(
   
   // 3-1. 하향 전파 (자녀 세대 조정): 부모들의 X 기준 중앙 정렬
   for (let l = pivotLevel + 1; l <= maxLevel; l++) {
-    if (!levelGroups[l]) continue;
-    
+    const currentLevelNodeGroup = levelGroups[l];
+    if (!currentLevelNodeGroup) continue;
+
     // 이 세대의 자녀들을 가지는 부모 유닛 탐색
     familyUnits.forEach(unit => {
       const parents = nodes.filter(n => unit.parent_ids.includes(n.id));
@@ -107,6 +160,14 @@ export function calculateGenogramLayout(
       
       if (currentLevelChildren.length === 1) {
         currentLevelChildren[0].layoutPosition.x = Math.round(coupleCenterX);
+        const childMarried = familyUnits.find(fu => fu.parent_ids.includes(currentLevelChildren[0].id));
+        if (childMarried) {
+          const partnerID = childMarried.parent_ids.find(pId => pId !== currentLevelChildren[0].id);
+          const partnerNode = partnerID ? nodes.find(n => !n.attributes.is_ip && n.id === partnerID) : null;
+          if ( partnerNode) {
+            partnerNode.layoutPosition.x = Math.round(coupleCenterX + config.nodeWidthGap);
+          }
+        }
       } else {
         const childTotalWidth = (currentLevelChildren.length - 1) * config.nodeWidthGap;
         const childStartX = coupleCenterX - childTotalWidth / 2;
@@ -165,9 +226,10 @@ export function calculateGenogramLayout(
     if (parents.length === 2) {
       const p1 = parents[0].layoutPosition;
       const p2 = parents[1].layoutPosition;
+      const lineY = unit.lineY ? unit.lineY : 0;
       unit.lineCenterPosition = {
         x: Math.round((p1.x + p2.x) / 2),
-        y: Math.round((p1.y + p2.y) / 2 + config.lineMarginY)
+        y: Math.round((p1.y + p2.y) / 2 + config.lineMarginY + lineY)
       };
     }
   });

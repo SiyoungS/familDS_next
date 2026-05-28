@@ -55,6 +55,7 @@ export interface PersonNode {
     x: number;
     y: number;
   }
+
 }
 
 // 인물 간의 관계(링크) 정보
@@ -94,6 +95,7 @@ export interface FamilyUnit {
 
   // 레이아웃 엔진용: 부부 연결 수평선의 중심 좌표
   lineCenterPosition?: { x: number; y: number };
+  lineY?: number;
 }
 export interface ChildGroup {
   child_ids: string[];
