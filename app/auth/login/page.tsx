@@ -1,61 +1,54 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../../providers/AuthProvider';
 
 export default function LoginPage() {
   const router = useRouter();
+  const { login, isAuthenticated, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleLogin = (event: FormEvent) => {
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/');
+    }
+  }, [isAuthenticated, router]);
+
+  const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
-    router.push('/');
+    setErrorMessage('');
+
+    try {
+      await login({ email, password });
+      router.push('/');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '로그인에 실패했습니다.');
+    }
   };
 
   return (
-    <main className="min-h-screen bg-[#f8f9fa] text-gray-900 font-sans flex items-center justify-center px-4 py-10">
+    <main onDragStart={(event) => event.preventDefault()} className="min-h-screen bg-[#f8f9fa] text-gray-900 font-sans flex items-center justify-center px-4 py-10 select-none">
       <div className="relative overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.08)] max-w-5xl w-full">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.14),_transparent_24%)] pointer-events-none" />
-        <div className="relative grid gap-8 lg:grid-cols-[1.1fr_0.9fr] p-8 lg:p-12">
-          <section className="flex flex-col justify-between rounded-[1.75rem] border border-gray-100 bg-[#f9fafc] p-8 lg:p-10 shadow-sm">
-            <div>
-              <span className="inline-flex rounded-full bg-[#d1fae5] px-3 py-1 text-sm font-semibold text-[#065f46]">
-                좋음 톤의 상담 AI
-              </span>
-              <h1 className="mt-8 text-3xl font-bold tracking-tight text-[#0f172a]">
-                심리 상담 가계도에 로그인
-              </h1>
-              <p className="mt-4 max-w-xl text-sm leading-7 text-gray-600">
-                상담 데이터를 안전하게 관리하고, AI 기반 가족 분석을 바로 시작하세요. 현재 앱의 심플하고 전문적인 디자인과 어울리는 로그인 화면입니다.
+        <div className="relative mx-auto max-w-xl p-8 lg:p-12">
+          <section className="rounded-[2rem] border border-gray-100 bg-white p-8 lg:p-10 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+            <div className="mb-8 text-center">
+              <p className="text-sm text-[#10b981] font-semibold uppercase tracking-[0.25em]">로그인</p>
+              <h1 className="mt-5 text-3xl font-bold text-[#0f172a]">계정으로 접속하기</h1>
+              <p className="mt-3 text-sm text-gray-500 leading-6">
+                이메일과 비밀번호를 입력하여 심리 상담 가계도 서비스를 이용하세요.
               </p>
             </div>
 
-            <div className="mt-10 space-y-4 text-sm text-gray-600">
-              <div className="rounded-3xl bg-white p-4 border border-gray-100 shadow-sm">
-                <p className="font-semibold text-gray-900">주요 기능</p>
-                <ul className="mt-3 space-y-2 text-sm text-gray-600">
-                  <li>• 상담 텍스트 기반 가계도 자동 생성</li>
-                  <li>• 데이터 입력/분석 결과 저장</li>
-                  <li>• 직관적인 레이아웃과 매끄러운 인터랙션</li>
-                </ul>
-              </div>
-              <div className="rounded-3xl bg-white p-4 border border-gray-100 shadow-sm">
-                <p className="font-semibold text-gray-900">이용 팁</p>
-                <p className="mt-2 text-sm leading-6 text-gray-600">
-                  이메일과 비밀번호만 입력하면 됩니다. 테스트용으로는 곧 추가될 실제 인증 기능을 확인할 수 있습니다.
-                </p>
-              </div>
-            </div>
-          </section>
-
-          <section className="rounded-[1.75rem] border border-gray-100 bg-white p-8 lg:p-10 shadow-sm">
-            <div className="mb-8">
-              <p className="text-sm text-[#10b981] font-bold uppercase tracking-[0.25em]">로그인</p>
-              <h2 className="mt-4 text-2xl font-bold text-[#0f172a]">계정으로 접속하기</h2>
-            </div>
-
             <form className="space-y-5" onSubmit={handleLogin}>
+              {errorMessage ? (
+                <p className="rounded-3xl bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-100">
+                  {errorMessage}
+                </p>
+              ) : null}
               <label className="block text-sm font-medium text-gray-700">
                 이메일
                 <input
@@ -63,7 +56,7 @@ export default function LoginPage() {
                   value={email}
                   onChange={(event) => setEmail(event.target.value)}
                   placeholder="example@domain.com"
-                  className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-4 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20"
+                  className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-4 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20 select-text"
                   required
                 />
               </label>
@@ -75,7 +68,7 @@ export default function LoginPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder="••••••••"
-                  className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-4 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20"
+                  className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-4 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20 select-text"
                   required
                 />
               </label>
@@ -92,9 +85,10 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="w-full rounded-3xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#10b981]/20 transition hover:bg-[#0d9b6d]"
+                disabled={loading}
+                className="w-full rounded-3xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#10b981]/20 transition hover:bg-[#0d9b6d] disabled:cursor-not-allowed disabled:opacity-70"
               >
-                로그인
+                {loading ? '로그인 중...' : '로그인'}
               </button>
             </form>
 

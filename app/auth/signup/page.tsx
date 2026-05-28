@@ -1,27 +1,43 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuth } from '../../providers/AuthProvider';
 
 export default function SignupPage() {
   const router = useRouter();
+  const { signup, isAuthenticated, loading } = useAuth();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
-  const handleSignup = (e: FormEvent) => {
+  useEffect(() => {
+    if (isAuthenticated) {
+      router.replace('/');
+    }
+  }, [isAuthenticated, router]);
+
+  const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
+    setErrorMessage('');
+
     if (password !== confirm) {
-      alert('비밀번호가 일치하지 않습니다.');
+      setErrorMessage('비밀번호가 일치하지 않습니다.');
       return;
     }
-    // TODO: 실제 가입 로직 (API 호출) 추가
-    router.push('/auth/login');
+
+    try {
+      await signup({ name, email, password });
+      router.push('/auth/login');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : '회원가입에 실패했습니다.');
+    }
   };
 
   return (
-    <main className="min-h-screen bg-[#f8f9fa] text-gray-900 font-sans flex items-center justify-center px-4 py-10">
+    <main onDragStart={(event) => event.preventDefault()} className="min-h-screen bg-[#f8f9fa] text-gray-900 font-sans flex items-center justify-center px-4 py-10 select-none">
       <div className="relative overflow-hidden rounded-[2rem] border border-gray-200 bg-white shadow-[0_30px_80px_rgba(15,23,42,0.08)] max-w-3xl w-full">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.08),_transparent_24%)] pointer-events-none" />
         <div className="relative p-8 lg:p-12">
@@ -34,6 +50,11 @@ export default function SignupPage() {
           </div>
 
           <form className="space-y-5" onSubmit={handleSignup}>
+            {errorMessage ? (
+              <p className="rounded-3xl bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-100">
+                {errorMessage}
+              </p>
+            ) : null}
             <label className="block text-sm font-medium text-gray-700">
               이름
               <input
@@ -41,7 +62,7 @@ export default function SignupPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="홍길동"
-                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20"
+                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20 select-text"
                 required
               />
             </label>
@@ -53,7 +74,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="example@domain.com"
-                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20"
+                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20 select-text"
                 required
               />
             </label>
@@ -65,7 +86,7 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20"
+                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20 select-text"
                 required
               />
             </label>
@@ -77,16 +98,17 @@ export default function SignupPage() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 placeholder="••••••••"
-                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20"
+                className="mt-3 w-full rounded-3xl border border-gray-200 bg-[#f8fafc] px-5 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981] focus:ring-2 focus:ring-[#10b981]/20 select-text"
                 required
               />
             </label>
 
             <button
               type="submit"
-              className="w-full rounded-3xl bg-[#10b981] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#10b981]/20 transition hover:bg-[#0d9b6d]"
+              disabled={loading}
+              className="w-full rounded-3xl bg-[#10b981] px-5 py-3 text-sm font-bold text-white shadow-lg shadow-[#10b981]/20 transition hover:bg-[#0d9b6d] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              계정 생성
+              {loading ? '가입 중...' : '계정 생성'}
             </button>
           </form>
 
