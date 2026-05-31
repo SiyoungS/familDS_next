@@ -19,21 +19,22 @@ export function calculateGenogramLayout(
   // 1. 깊은 복사로 원본 데이터 무결성 보존
   const nodes = deepCopyJson<PersonNode[]>(data.nodes);
   const familyUnits = deepCopyJson<FamilyUnit[]>(data.familyUnits);
-
+  console.log("=== deepCopy nodes, familyUnits");
   // 2. 세대별(relLevel) 노드 그룹화 및 인원수 카운트
   const levelGroups: { [key: number]: PersonNode[] } = {};
   nodes.forEach(node => {
     if (!levelGroups[node.relLevel]) levelGroups[node.relLevel] = [];
     levelGroups[node.relLevel].push(node);
   });
-
+  console.log("세대별 노드 그룹화 완료")
   const levelCounts = nodes.reduce((acc, node) => {
     acc[node.relLevel] = (acc[node.relLevel] || 0) + 1;
     return acc;
   }, {} as Record<number, number>);
   
   const maxSizeOfLevel = Math.max(...Object.values(levelCounts));
-  
+  console.log(`세대별 노드 수: `, levelCounts);
+
   // 가장 노드가 많은 세대를 찾음 (0번 인덱스)
   const sortedLevelsBySize = Object.keys(levelCounts)
     .map(Number)

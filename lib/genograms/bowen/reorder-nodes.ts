@@ -123,7 +123,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       const ipCouple = Array.from(ipCoupleSet);
       // 최종 세 구역을 순서대로 병합 (좌에서 우로 하나의 선형 흐름 완성)
       sortedGroup = [...ipSiblings, ...ipCouple, ...spouseSiblings];
-      console.log("Gen 0 : sortedGroup = ",sortedGroup);
+      console.log("1. Gen 0 : sortedGroup = ",sortedGroup.map(n => n.name));
     } else if (level > 0) {
       /**
        * 아랫 세대
@@ -139,16 +139,22 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         if (!siblingGroups.has(key)) siblingGroups.set(key, []);
         siblingGroups.get(key)!.push(node);
       });
+      console.log(`2-1. Gen ${level} siblingGroups = `, Array.from(siblingGroups.entries().map(([k, v]) => [k, v.map(n => n.name)])));
       // 부모 세대 정렬에 따라 자녀 세대의 display_order 결정
       const beforeLevelNodeGroup = nodes.filter(n => n.relLevel === level - 1).sort((a, b) => a.display_order - b.display_order);
+      console.log(`2-2. Gen ${level} beforeLevelNodeGroup = `, beforeLevelNodeGroup.map(n => `${n.name} (display_order: ${n.display_order})`));
+
       beforeLevelNodeGroup.forEach(parentNode => {
         const familyID = familyUnits.find(fu => fu.parent_ids.includes(parentNode.id))?.id;
         if (!familyID) return;
           const siblingGroup = siblingGroups.get(familyID);
           if (!siblingGroup) return;
           const sortedSiblings = siblingGroup.sort((a, b) => (a.attributes.birth_order || 0) - (b.attributes.birth_order || 0));
+          console.log(`\nGen ${level} parentNode ${parentNode.name} has siblingGroup = `, sortedSiblings.map(n => `${n.name} (birth_order: ${n.attributes.birth_order})`));
           sortedSiblings.forEach(node => {
+            if (sortedGroup.some(n => n.id === node.id)) return; // 이미 추가된 노드는 스킵
             const addedPartners = insertPartners(node); // 배우자 삽입
+            console.log(`ADD: Gen ${level} node ${node.name} with partners = `, addedPartners.map(n => n.name));
             sortedGroup.push(...addedPartners);
           });
       })
@@ -179,9 +185,10 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         partnerGroups.delete(familyID); // 이미 처리된 그룹은 삭제하여 중복 방지
       })
       sortedGroup = group.sort((a, b) => (a.attributes.birth_order || 0) - (b.attributes.birth_order || 0));
+      
     }
     const displayOrders = sortedGroup.map((n,i) => `${n.id}:${n.name} (display_order: ${i})`);
-    console.log(`Gen ${level} sortedGroup = `, displayOrders);
+    console.log(`\nGen ${level} displayOrders length = `, displayOrders.length,`\ndisplayOrders = `, displayOrders);
     // 결정된 순서를 기반으로 각 노드에 고유한 display_order (0, 1, 2...) 할당
     sortedGroup.forEach((node, index) => {
       const targetNode = nodes.find(n => n.id === node.id);

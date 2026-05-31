@@ -23,7 +23,8 @@ export default function GenogramModal() {
       console.log('Counsel Target for Genogram:', counselTarget); // 디버깅용 로그
       console.log('Counsel Text for Genogram:', counselText); // 디버깅용 로그
       const flag = false;
-      if (!flag) {
+      if (flag) {
+        console.log('Fetching genogram data from /api/generate with payload:', { counselText, counselTarget }); // 디버깅용 로그
         fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -43,6 +44,7 @@ export default function GenogramModal() {
         })
         .finally(() => setIsLoading(false));
       } else {
+        console.log('Fetching genogram data from /api/mock-genogram'); // 디버깅용 로그
         fetch('/api/mock-genogram')
           .then(res => res.json())
           .then(setData)

@@ -83,11 +83,11 @@ export default function Home() {
         .finally(() => setAnalysisStep('results'));
     }
   };
-  useEffect(() => {
-    if (!loading && !isAuthenticated) {
-      router.replace('/auth/login');
-    }
-  }, [isAuthenticated, loading, router]);
+  // useEffect(() => {
+  //   if (!loading && !isAuthenticated) {
+  //     router.replace('/auth/login');
+  //   }
+  // }, [isAuthenticated, loading, router]);
 
   const handleReset = () => {
     setCounselText('');
@@ -103,9 +103,9 @@ export default function Home() {
     );
   }
 
-  if (!isAuthenticated) {
-    return null;
-  }
+  // if (!isAuthenticated) {
+  //   return null;
+  // }
 
   return (
     <div className="relative w-full h-screen bg-[#ffffff] overflow-hidden font-sans select-none flex">

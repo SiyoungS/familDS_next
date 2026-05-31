@@ -8,7 +8,9 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function GET() {
   try {
-    const filePath = path.join(process.cwd(), 'lib', 'mockdata_2.jsonl');
+    const fileName = 'mockdata_2.jsonl';
+    console.log(`Attempting to read file: ${fileName}`); // 디버깅용 로그
+    const filePath = path.join(process.cwd(), 'lib', fileName);
     const fileContent = await fs.readFile(filePath, 'utf8');
     const testEnv = process.env.TEST_ENV || 'default';
     console.log(`Current TEST_ENV: ${testEnv}`);
