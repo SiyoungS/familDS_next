@@ -1,5 +1,7 @@
 import { BWGenogramData, PersonNode, FamilyUnit, RelationshipLink } from '@/types/bowengenogram.types';
 export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
+  console.log("===Reordering display_orders for Genogram Nodes===");
+  console.log("data: ", JSON.stringify(data));
   // 깊은 복사로 원본 데이터 보존
   const nodes = JSON.parse(JSON.stringify(data.nodes)) as PersonNode[];
   // 빠른 검색을 위한 Map 생성
@@ -68,6 +70,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       return [nodeB, nodeA];
     }
   }
+  console.log("===Start reordering display_orders by relLevel===");
   // 각 세대별 정렬 처리
   Object.keys(levelGroups).forEach(levelStr => {
     const level = Number(levelStr);
@@ -75,6 +78,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
     let sortedGroup: PersonNode[] = [];
 
     if (level === 0) {
+      console.log("===Processing Gen 0 (IP generation) with special rules===");
       const filterSiblings = (id: string) => {
         const targetFamilyUnit = familyUnits.find(fu => fu.childGroups?.some(cg => cg.child_ids.includes(id)));
         if (!targetFamilyUnit) return [];

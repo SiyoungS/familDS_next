@@ -66,7 +66,7 @@ export default function Home() {
         body: JSON.stringify({ counselText: counselText, counselTarget: counselTarget })
       })
       .then(res => {
-        if (!res.ok) throw new Error('데이터 생성 실패');
+        // if (!res.ok) throw new Error('데이터 생성 실패');
         console.log('Raw response from /api/generate:', res); // 디버깅용 로그
         return res.json();
       })
