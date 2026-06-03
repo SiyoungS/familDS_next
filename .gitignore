@@ -32,12 +32,12 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
-prompt.env.txt
-prompt.env_2.txt
+*prompt.env.txt
+*prompt.env_2.txt
 .prompt.env.txt
-prompt.env*.txt
-prompt-contents.env.txt
-prompt-interface.env.txt
+*prompt.env*.txt
+*prompt-contents.env.txt
+*prompt-interface.env.txt
 .prompt-contents.env.txt
 .prompt-interface.env.txt
 mockdata.jsonl
