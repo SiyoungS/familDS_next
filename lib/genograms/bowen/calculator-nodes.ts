@@ -160,13 +160,19 @@ export function calculateGenogramLayout(
       currentLevelChildren.sort((a, b) => a.display_order - b.display_order);
       
       if (currentLevelChildren.length === 1) {
-        currentLevelChildren[0].layoutPosition.x = Math.round(coupleCenterX);
-        const childMarried = familyUnits.find(fu => fu.parent_ids.includes(currentLevelChildren[0].id));
+        const childNode = currentLevelChildren[0];
+        childNode.layoutPosition.x = Math.round(coupleCenterX);
+
+        const childMarried = familyUnits.find(fu => fu.parent_ids.includes(childNode.id));
         if (childMarried) {
           const partnerID = childMarried.parent_ids.find(pId => pId !== currentLevelChildren[0].id);
           const partnerNode = partnerID ? nodes.find(n => !n.attributes.is_ip && n.id === partnerID) : null;
           if ( partnerNode) {
-            partnerNode.layoutPosition.x = Math.round(coupleCenterX + config.nodeWidthGap);
+            if (childNode.display_order > partnerNode.display_order) {
+              partnerNode.layoutPosition.x = Math.round(coupleCenterX - config.nodeWidthGap);
+            } else {
+              partnerNode.layoutPosition.x = Math.round(coupleCenterX + config.nodeWidthGap);
+            }
           }
         }
       } else {

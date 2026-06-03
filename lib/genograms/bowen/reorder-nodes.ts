@@ -170,14 +170,27 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
        */
       const partnerGroups = new Map<string, PersonNode[]>();
       group.forEach(node => {
-        const fu = familyUnits.find(f => f.parent_ids?.some(cg => cg.includes(node.id)));
-        const key = fu ? fu.id : 'no-parent';
-        if (!partnerGroups.has(key)) partnerGroups.set(key, []);
-        partnerGroups.get(key)!.push(node);
+        const fu = familyUnits.find(f => f.parent_ids?.includes(node.id));
+        if (fu) {
+          // 본인이 부모인 가족
+          const key = fu.id;
+          if (!partnerGroups.has(key)) partnerGroups.set(key, []);
+          partnerGroups.get(key)!.push(node);
+        } else {
+          // 자식이 없는 경우, 자신이 자식으로 속한 원가족(originFamily) 찾기 
+          const originFu = familyUnits.find(f => f.childGroups?.some(cg => cg.child_ids.includes(node.id)));
+          // 원가족이 있으면 'origin-{id}', 아예 없으면 'single-{id}'로 고유 키 부여
+          const key = originFu ? `origin-${originFu.id}` : `single-${node.id}`;
+          if (!partnerGroups.has(key)) partnerGroups.set(key, []);
+          partnerGroups.get(key)!.push(node);
+        }
       });
       // 자식 세대 정렬에 따라 부모 세대의 display_order 결정
-      const nextLevelNodeGroup = nodes.filter(n => n.relLevel === level - 1).sort((a, b) => a.display_order - b.display_order);
+      const nextLevelNodeGroup = nodes
+        .filter(n => n.relLevel === level + 1)
+        .sort((a, b) => a.display_order - b.display_order);
       
+      // 1. 자식 세대에 따라 부모 세대 핵심 노드 정렬
       nextLevelNodeGroup.forEach(childNode => {
         const familyID = familyUnits.find(fu => fu.childGroups?.some(cg => cg.child_ids.includes(childNode.id)))?.id;
         if (!familyID) return;
@@ -188,8 +201,36 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         sortedGroup.push(...reorderedPartners);
         partnerGroups.delete(familyID); // 이미 처리된 그룹은 삭제하여 중복 방지
       })
-      sortedGroup = group.sort((a, b) => (a.attributes.birth_order || 0) - (b.attributes.birth_order || 0));
       
+      // 2. 자식 세대에 속하지 않은 부모/친척 노드 처리 (예: 자식이 없는 부모, 원가족이 없는 친척 등)
+      const unplacedNodes: PersonNode[] = [];
+      partnerGroups.forEach((partnerGroup, key) => {
+        const reorderedPartners = reorderPartners(partnerGroup);
+        if (key.startsWith('origin-')) {
+          // origin은 자식 세대가 있는 부모의 형제들
+          const originFamilyId = key.replace('origin-', '');
+          const originFamily = familyUnits.find(fu => fu.id === originFamilyId);
+          if (originFamily) {
+            const siblingIds = originFamily.childGroups?.flatMap(cg => cg.child_ids) || [];
+            const anchorIndex = sortedGroup.findIndex(sn => siblingIds.includes(sn.id));
+            if (anchorIndex !== -1) {
+              const anchorNode = sortedGroup[anchorIndex];
+              if (anchorNode.gender === 'male') {
+                // 아버지의 형제는 좌측에
+                sortedGroup.splice(anchorIndex, 0, ...reorderedPartners);
+              } else {
+                // 어머니의 형제는 우측에
+                sortedGroup.splice(anchorIndex + 1, 0, ...reorderedPartners);
+              }
+              return; // 처리 완료 후 다음 그룹으로 넘어가기
+            }
+          }
+        }
+        // 형제를 못 찾거나 단독 노드인 경우 임시 보관
+        unplacedNodes.push(...reorderedPartners);
+      });
+      // 3. 어디에도 배치되지 않은 노드들은 display_order가 뒤로 가도록 추가
+      sortedGroup.push(...unplacedNodes);
     }
     const displayOrders = sortedGroup.map((n,i) => `${n.id}:${n.name} (display_order: ${i})`);
     console.log(`\nGen ${level} displayOrders length = `, displayOrders.length,`\ndisplayOrders = `, displayOrders);
