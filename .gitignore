@@ -44,6 +44,7 @@ mockdata.jsonl
 mockdata_*.jsonl
 mockdata.md
 
+/samples*
 
 # vercel
 .vercel

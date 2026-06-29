@@ -12,6 +12,12 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
   });
   const familyUnits = JSON.parse(JSON.stringify(data.familyUnits || [])) as FamilyUnit[];
 
+  // [#6] 출생순서 동률 시 결정적 정렬을 위한 2차 키(최초 등장 순서)
+  const originalIndex = new Map<string, number>(nodes.map((n, i) => [n.id, i]));
+  const byBirthOrder = (a: PersonNode, b: PersonNode) =>
+    ((a.attributes.birth_order || 0) - (b.attributes.birth_order || 0)) ||
+    ((originalIndex.get(a.id) ?? 0) - (originalIndex.get(b.id) ?? 0));
+
   // 세대별(relLevel)로 그룹화
   console.log(`===levelGroups 생성===`);
   const levelGroups: { [key: number]: PersonNode[] } = {};
@@ -83,20 +89,36 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         const targetFamilyUnit = familyUnits.find(fu => fu.childGroups?.some(cg => cg.child_ids.includes(id)));
         if (!targetFamilyUnit) return [];
         return group.filter(n => targetFamilyUnit.childGroups?.some(cg => cg.child_ids.includes(n.id) && n.id !== id))
-          .sort((a, b) => (a.attributes.birth_order || 0) - (b.attributes.birth_order || 0));
+          .sort(byBirthOrder);
       }
       
       /**
        * [0세대 정정 규칙]
-       * 1구역: IP 형제들 (birth_order 오름차순)
+       * 1구역: IP보다 손위 형제 (출생순서상 IP 앞) - 좌측
        * 2구역: IP 본인 + IP 전 배우자 + 현재 배우자 + 현재 배우자의 전 배우자 (중앙 결합)
+       * 2.5구역: IP보다 손아래 형제 (출생순서상 IP 뒤) - 우측
        * 3구역: 배우자 형제들 (birth_order 오름차순)
        */
       const ipNode = group.find(n => n.attributes.is_ip);
       if (!ipNode) throw new Error("내담자(IP) 노드가 부족합니다.");
-      // 1구역: IP의 형제들 (IP 본인 제외)
+      // 1구역/2.5구역: IP의 형제들을 출생순서 기준으로 IP 앞(손위)/뒤(손아래)로 분리.
+      // childGroup의 child_ids 배열 순서가 출생 순서의 기준이다.
       const findIPSiblings = filterSiblings(ipNode.id);
-      const ipSiblings = insertSpouses(findIPSiblings);
+      const ipOriginUnit = familyUnits.find(fu => fu.childGroups?.some(cg => cg.child_ids.includes(ipNode.id)));
+      const ipBirthOrderIds = ipOriginUnit ? (ipOriginUnit.childGroups || []).flatMap(cg => cg.child_ids) : [];
+      const ipIdx = ipBirthOrderIds.indexOf(ipNode.id);
+      const byChildOrder = (a: PersonNode, b: PersonNode) =>
+        (ipBirthOrderIds.indexOf(a.id) - ipBirthOrderIds.indexOf(b.id));
+      const olderSiblings: PersonNode[] = [];
+      const youngerSiblings: PersonNode[] = [];
+      findIPSiblings.forEach(sib => {
+        const sIdx = ipBirthOrderIds.indexOf(sib.id);
+        // IP보다 출생순서가 뒤(손아래)면 우측, 그 외(손위 또는 순서불명)는 좌측
+        if (ipIdx >= 0 && sIdx > ipIdx) youngerSiblings.push(sib);
+        else olderSiblings.push(sib);
+      });
+      const ipOlderSiblings = insertSpouses(olderSiblings.sort(byChildOrder));
+      const ipYoungerSiblings = insertSpouses(youngerSiblings.sort(byChildOrder));
 
       // 2구역: IP 관련 부부체제 수집
       const ipRelatedUnits = familyUnits.filter(fu => fu.parent_ids.includes(ipNode.id));
@@ -125,8 +147,8 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         spouseSiblings = insertSpouses(findSpouseSiblings);
       }
       const ipCouple = Array.from(ipCoupleSet);
-      // 최종 세 구역을 순서대로 병합 (좌에서 우로 하나의 선형 흐름 완성)
-      sortedGroup = [...ipSiblings, ...ipCouple, ...spouseSiblings];
+      // 최종 병합 (좌→우): 손위형제, IP부부, 손아래형제, 배우자형제
+      sortedGroup = [...ipOlderSiblings, ...ipCouple, ...ipYoungerSiblings, ...spouseSiblings];
       console.log("1. Gen 0 : sortedGroup = ",sortedGroup.map(n => n.name));
     } else if (level > 0) {
       /**
@@ -149,18 +171,20 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       console.log(`2-2. Gen ${level} beforeLevelNodeGroup = `, beforeLevelNodeGroup.map(n => `${n.name} (display_order: ${n.display_order})`));
 
       beforeLevelNodeGroup.forEach(parentNode => {
-        const familyID = familyUnits.find(fu => fu.parent_ids.includes(parentNode.id))?.id;
-        if (!familyID) return;
-          const siblingGroup = siblingGroups.get(familyID);
+        // [#5] 한 부모가 여러 가족 단위(재혼 등)에 속할 수 있으므로 모든 단위를 순회한다.
+        const parentUnits = familyUnits.filter(fu => fu.parent_ids.includes(parentNode.id));
+        parentUnits.forEach(unit => {
+          const siblingGroup = siblingGroups.get(unit.id);
           if (!siblingGroup) return;
-          const sortedSiblings = siblingGroup.sort((a, b) => (a.attributes.birth_order || 0) - (b.attributes.birth_order || 0));
-          console.log(`\nGen ${level} parentNode ${parentNode.name} has siblingGroup = `, sortedSiblings.map(n => `${n.name} (birth_order: ${n.attributes.birth_order})`));
+          const sortedSiblings = [...siblingGroup].sort(byBirthOrder); // [#6] 안정 정렬
+          console.log(`\nGen ${level} parentNode ${parentNode.name} (unit ${unit.id}) has siblingGroup = `, sortedSiblings.map(n => `${n.name} (birth_order: ${n.attributes.birth_order})`));
           sortedSiblings.forEach(node => {
             if (sortedGroup.some(n => n.id === node.id)) return; // 이미 추가된 노드는 스킵
             const addedPartners = insertPartners(node); // 배우자 삽입
             console.log(`ADD: Gen ${level} node ${node.name} with partners = `, addedPartners.map(n => n.name));
             sortedGroup.push(...addedPartners);
           });
+        });
       })
 
     } else {
@@ -241,6 +265,18 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         targetNode.display_order = index;
       }
     });
+  });
+
+  // [#8] 미배치 노드 fallback: 어느 버킷에도 잡히지 않아 display_order가 -1로 남은
+  // 노드를 같은 세대의 끝에 순차 배치하여 -1끼리 겹치지 않도록 한다.
+  Object.keys(levelGroups).map(Number).forEach(level => {
+    const placed = nodes.filter(n => n.relLevel === level && n.display_order >= 0);
+    const unplaced = nodes.filter(n => n.relLevel === level && n.display_order < 0);
+    if (unplaced.length === 0) return;
+    let next = placed.length > 0 ? Math.max(...placed.map(n => n.display_order)) + 1 : 0;
+    unplaced
+      .sort((a, b) => (originalIndex.get(a.id) ?? 0) - (originalIndex.get(b.id) ?? 0))
+      .forEach(n => { n.display_order = next++; });
   });
 
   return { ...data, nodes };

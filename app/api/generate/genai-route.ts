@@ -29,7 +29,9 @@ export async function CallGemini(
         systemInstruction: prompt,
         responseMimeType: "application/json",
         responseSchema: bwGenogramSchema,
+        // 결정적(일정한) 출력을 위해 temperature 0 + 고정 seed 사용
         temperature: 0,
+        seed: 42,
       }
     })
     const rawContent = response.text;

@@ -4,7 +4,9 @@ interface LayoutConfig {
   nodeWidthGap: number;     // 모든 수평 노드 간격 고정 (기본 150px)
   levelHeightGap: number;   // 세대 간 수직 간격 (기본 250px)
   lineMarginY: number;      // "ㄷ"자 수평선이 지나갈 세대 내 내부 마진 Y축 (기본 50px)
-  canvasMargin: number; // 캔버스에 둘 여백
+  canvasMargin: number;     // 캔버스에 둘 여백
+  nodeMinGap: number;       // [#7] 겹침 방지를 위한 같은 세대 노드 최소 간격 (기호 폭 기준, 기본 70px)
+  betweenUnitOffsetY: number; // 부모 사이에 낀 유닛의 "ㄷ"자 보정 오프셋 (기본 160px)
 }
 
 export function deepCopyJson<T>(value: T): T {
@@ -14,7 +16,7 @@ export function deepCopyJson<T>(value: T): T {
 
 export function calculateGenogramLayout(
   data: BWGenogramData,
-  config: LayoutConfig = { nodeWidthGap: 150, levelHeightGap: 250, lineMarginY: 50, canvasMargin: 100 }
+  config: LayoutConfig = { nodeWidthGap: 150, levelHeightGap: 250, lineMarginY: 50, canvasMargin: 100, nodeMinGap: 70, betweenUnitOffsetY: 160 }
 ): BWGenogramData {
   // 1. 깊은 복사로 원본 데이터 무결성 보존
   const nodes = deepCopyJson<PersonNode[]>(data.nodes);
@@ -55,7 +57,6 @@ export function calculateGenogramLayout(
   const levels = Object.keys(levelGroups).map(Number);
   const minLevel = Math.min(...levels);
   const maxLevel = Math.max(...levels);
-  const totalGenerations = maxLevel - minLevel + 1;
 
   // ==========================================
   // [단계 1] 모든 노드의 세대별 Y축 상대좌표 기본 지정 (세대 간격 기본값 설정)
@@ -72,39 +73,44 @@ export function calculateGenogramLayout(
   familyUnits.forEach((unit) => {
     const parents = nodes.filter(n => unit.parent_ids.includes(n.id));
     if (parents.length === 0) return;
-    
-    // 부모들의 Y 좌표 
-    const parentY = parents[0].layoutPosition.y;
-    const maxParentY = Math.max(...parents.map(p => p.layoutPosition.y));
 
-    const parentsGroup = levelGroups[parents[0].relLevel].sort((a, b) => a.display_order - b.display_order);
-    // 같은 세대 내 부모 사이에 낀 노드
-    const firstParentIndex = parentsGroup.findIndex(p => p.id === parents[0].id);
-    const lastParentIndex = parentsGroup.findIndex(p => p.id === parents[1]?.id);
-    const minParentIndex = Math.min(firstParentIndex, lastParentIndex);
-    const maxParentIndex = Math.max(firstParentIndex, lastParentIndex);
-    const betweenParents: PersonNode[] = parentsGroup.map((n,i) => {
-      if (i > minParentIndex && i < maxParentIndex) return n;
-    }).filter((v): v is NonNullable<typeof v> => !!v);
-    console.log("betweenParents: ", betweenParents.map(n => n.id));
+    // 부모들의 Y 좌표
+    const parentY = parents[0].layoutPosition.y;
+
     let otherBetweenUnitsCount = 0;
     let betweenUnitMaxY = 0;
-    betweenParents.forEach(n => {
-      // 자식이 있는 경우에만 카운팅
-      const otherBetweenUnit = familyUnits.filter(u => 
-        u.parent_ids.includes(n.id) 
-        && u.parent_ids.some(id => parents.some(p => p.id === id))
-        && u.id !== unit.id
-        && u.childGroups.length > 0
-      );
-      if (otherBetweenUnit.length > 0) {
-        const unitMaxY = Math.max(
-          ...otherBetweenUnit.flatMap(u => u.childGroups?.flatMap(g => g.child_ids).map(id => nodes.find(n => n.id === id)?.layoutPosition.y).filter((v): v is number => !!v) || [])
-        )-160;
-        betweenUnitMaxY = Math.max(betweenUnitMaxY, unitMaxY);
-        otherBetweenUnitsCount++;
-      }
-    })
+
+    // [#4] '부모 사이에 낀 노드' 계산은 부모가 정확히 2명일 때만 의미가 있다.
+    // 편부모(1명) 단위에서 인덱스 -1로 인한 오작동을 방지한다.
+    if (parents.length === 2) {
+      const parentsGroup = levelGroups[parents[0].relLevel].sort((a, b) => a.display_order - b.display_order);
+      // 같은 세대 내 부모 사이에 낀 노드
+      const firstParentIndex = parentsGroup.findIndex(p => p.id === parents[0].id);
+      const lastParentIndex = parentsGroup.findIndex(p => p.id === parents[1].id);
+      const minParentIndex = Math.min(firstParentIndex, lastParentIndex);
+      const maxParentIndex = Math.max(firstParentIndex, lastParentIndex);
+      const betweenParents: PersonNode[] = parentsGroup.map((n, i) => {
+        if (i > minParentIndex && i < maxParentIndex) return n;
+      }).filter((v): v is NonNullable<typeof v> => !!v);
+      console.log("betweenParents: ", betweenParents.map(n => n.id));
+      betweenParents.forEach(n => {
+        // 자식이 있는 경우에만 카운팅
+        const otherBetweenUnit = familyUnits.filter(u =>
+          u.parent_ids.includes(n.id)
+          && u.parent_ids.some(id => parents.some(p => p.id === id))
+          && u.id !== unit.id
+          && u.childGroups.length > 0
+        );
+        if (otherBetweenUnit.length > 0) {
+          const unitMaxY = Math.max(
+            // [#2] y=0인 자녀가 truthy 필터에서 누락되지 않도록 != null 사용
+            ...otherBetweenUnit.flatMap(u => u.childGroups?.flatMap(g => g.child_ids).map(id => nodes.find(n => n.id === id)?.layoutPosition.y).filter((v): v is number => v != null) || [])
+          ) - config.betweenUnitOffsetY;
+          betweenUnitMaxY = Math.max(betweenUnitMaxY, unitMaxY);
+          otherBetweenUnitsCount++;
+        }
+      });
+    }
     unit.lineY = betweenUnitMaxY;
     console.log(`FamilyUnit ${unit.id} has ${otherBetweenUnitsCount} other units between parents.`);
     
@@ -120,6 +126,16 @@ export function calculateGenogramLayout(
     });
   });
 
+  // [#1] X좌표가 실제로 배치된 노드를 추적한다. (x===0을 '미배치'로 오인하지 않기 위함)
+  const placedIds = new Set<string>();
+
+  // 어떤 가족 단위든 '자녀'로 등장하는 노드 집합.
+  // 이런 노드는 자기 부모 아래에 독립적으로 배치되므로, 배우자라 해도
+  // 다른 가족의 자녀 옆으로 끌어와 배치하면 안 된다. (조부-부모 연결 끊김 방지)
+  const childNodeIds = new Set<string>(
+    familyUnits.flatMap(u => (u.childGroups || []).flatMap(g => g.child_ids))
+  );
+
   // ==========================================
   // [단계 2] 최우선 순위: 가장 노드가 많은 '기준 세대' 일렬 완벽 고정 배치
   // ==========================================
@@ -129,6 +145,7 @@ export function calculateGenogramLayout(
 
   pivotGroup.forEach((node, index) => {
     node.layoutPosition.x = Math.round(pivotStartX + (index * config.nodeWidthGap));
+    placedIds.add(node.id);
   });
 
   // ==========================================
@@ -154,34 +171,46 @@ export function calculateGenogramLayout(
         return [...acc, ...(g.child_ids || [])];
       }, []);
       const currentLevelChildren = nodes.filter(n => n.relLevel === l && allChildIds.includes(n.id));
-      
-      if (currentLevelChildren.length === 0) return;
-      
-      currentLevelChildren.sort((a, b) => a.display_order - b.display_order);
-      
-      if (currentLevelChildren.length === 1) {
-        const childNode = currentLevelChildren[0];
-        childNode.layoutPosition.x = Math.round(coupleCenterX);
 
+      if (currentLevelChildren.length === 0) return;
+
+      currentLevelChildren.sort((a, b) => a.display_order - b.display_order);
+
+      // [#3] 각 자녀와 그 배우자를 display_order 순서대로 하나의 시퀀스로 구성한다.
+      // (단일/다자녀 구분 없이 동일 로직으로 처리하여, 다자녀 그룹의 기혼 자녀
+      //  배우자가 누락되던 문제를 해결한다.)
+      const sequence: PersonNode[] = [];
+      const seen = new Set<string>();
+      const pushOnce = (node: PersonNode) => {
+        if (seen.has(node.id)) return;
+        seen.add(node.id);
+        sequence.push(node);
+      };
+      currentLevelChildren.forEach(childNode => {
         const childMarried = familyUnits.find(fu => fu.parent_ids.includes(childNode.id));
-        if (childMarried) {
-          const partnerID = childMarried.parent_ids.find(pId => pId !== currentLevelChildren[0].id);
-          const partnerNode = partnerID ? nodes.find(n => !n.attributes.is_ip && n.id === partnerID) : null;
-          if ( partnerNode) {
-            if (childNode.display_order > partnerNode.display_order) {
-              partnerNode.layoutPosition.x = Math.round(coupleCenterX - config.nodeWidthGap);
-            } else {
-              partnerNode.layoutPosition.x = Math.round(coupleCenterX + config.nodeWidthGap);
-            }
-          }
+        const partnerID = childMarried?.parent_ids.find(pId => pId !== childNode.id);
+        // 배우자를 짝으로 끼워 넣는 경우: 배우자가 (1) 같은 부모의 자녀가 아니고
+        // (2) 다른 가족의 자녀로 독립 배치되지도 않는 '결혼해 들어온' 인물일 때만.
+        // (박정호의 배우자 김미영처럼 자기 부모 아래 배치돼야 하는 인물은 제외)
+        const partnerNode = partnerID && !allChildIds.includes(partnerID) && !childNodeIds.has(partnerID)
+          ? nodes.find(n => n.id === partnerID) || null
+          : null;
+        if (partnerNode && partnerNode.display_order < childNode.display_order) {
+          pushOnce(partnerNode);
+          pushOnce(childNode);
+        } else {
+          pushOnce(childNode);
+          if (partnerNode) pushOnce(partnerNode);
         }
-      } else {
-        const childTotalWidth = (currentLevelChildren.length - 1) * config.nodeWidthGap;
-        const childStartX = coupleCenterX - childTotalWidth / 2;
-        currentLevelChildren.forEach((childNode, index) => {
-          childNode.layoutPosition.x = Math.round(childStartX + (index * config.nodeWidthGap));
-        });
-      }
+      });
+
+      // 시퀀스 전체를 부부 중심점 기준으로 좌우 대칭 배치
+      const seqTotalWidth = (sequence.length - 1) * config.nodeWidthGap;
+      const seqStartX = coupleCenterX - seqTotalWidth / 2;
+      sequence.forEach((node, index) => {
+        node.layoutPosition.x = Math.round(seqStartX + (index * config.nodeWidthGap));
+        placedIds.add(node.id);
+      });
     });
   }
 
@@ -195,11 +224,8 @@ export function calculateGenogramLayout(
       if (parents.length !== 2) return; // 부모 둘 다 현재 세대인 경우만 처리
 
       const allChildIds = unit.childGroups.reduce((acc: string[], g: ChildGroup) => [...acc, ...g.child_ids], []);
-      const childrenNodes = nodes.filter(n => nobleGroupChild(n, allChildIds));
-      
-      function nobleGroupChild(n: PersonNode, ids: string[]) {
-        return ids.includes(n.id) && n.layoutPosition.x !== 0; // 이미 좌표가 잡힌 자녀 기준
-      }
+      // [#1] x===0을 '미배치'로 오인하지 않도록 placedIds로 배치 여부를 판단한다.
+      const childrenNodes = nodes.filter(n => allChildIds.includes(n.id) && placedIds.has(n.id));
 
       if (childrenNodes.length === 0) return;
 
@@ -211,8 +237,110 @@ export function calculateGenogramLayout(
       parents.sort((a, b) => a.display_order - b.display_order);
       parents[0].layoutPosition.x = Math.round(childrenCenterX - (config.nodeWidthGap / 2));
       parents[1].layoutPosition.x = Math.round(childrenCenterX + (config.nodeWidthGap / 2));
+      placedIds.add(parents[0].id);
+      placedIds.add(parents[1].id);
     });
   }
+
+  // ==========================================
+  // [단계 3-4] 연결혼 부부 인접 보정 (서로 다른 가문의 자녀가 결혼한 경우)
+  // 자녀가 없는 부부(childGroups 비어있음)가 각자 부모 아래로 배치되어 서로
+  // 떨어진 경우, 형제 수가 적은(또는 IP가 없는) 쪽 가문의 서브트리를 통째로
+  // 이동시켜 부부를 인접시킨다. (자녀가 있는 부부는 자녀가 사이를 잇도록 유지)
+  // ==========================================
+  const ipId = nodes.find(n => n.attributes.is_ip)?.id;
+  const childIdsOf = (u: FamilyUnit) => (u.childGroups || []).flatMap(g => g.child_ids);
+  const originUnitOf = (n: PersonNode) => familyUnits.find(u => childIdsOf(u).includes(n.id));
+  const siblingCountOf = (u?: FamilyUnit) => u ? childIdsOf(u).length : Number.POSITIVE_INFINITY;
+  // 연결혼 unit을 건너뛰고 노드의 가족 그래프 서브트리(부모/자식 방향)를 수집
+  const collectSubtree = (startId: string, excludeUnitId: string) => {
+    const visited = new Set<string>([startId]);
+    const queue = [startId];
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      familyUnits.forEach(u => {
+        if (u.id === excludeUnitId) return;
+        const members = [...(u.parent_ids || []), ...childIdsOf(u)];
+        if (members.includes(cur)) {
+          members.forEach(m => { if (!visited.has(m)) { visited.add(m); queue.push(m); } });
+        }
+      });
+    }
+    return visited;
+  };
+
+  familyUnits.forEach(unit => {
+    // 자녀가 있는 부부는 자녀 중앙정렬이 처리하므로 제외
+    if (childIdsOf(unit).length > 0) return;
+    const partners = unit.parent_ids.map(id => nodes.find(n => n.id === id)).filter((v): v is PersonNode => !!v);
+    if (partners.length !== 2) return;
+    const [pa, pb] = partners;
+    if (pa.relLevel !== pb.relLevel) return;
+    if (Math.abs(pa.layoutPosition.x - pb.layoutPosition.x) <= config.nodeWidthGap + 1) return; // 이미 인접
+
+    const subA = collectSubtree(pa.id, unit.id);
+    const subB = collectSubtree(pb.id, unit.id);
+    if (subA.has(pb.id) || subB.has(pa.id)) return; // 다중 연결 등 복잡한 경우는 보정하지 않음
+
+    // 이동할 쪽(mover) 결정: IP가 포함된 가문은 고정, 그 외엔 형제 수가 적은 쪽 이동
+    let mover: PersonNode, anchor: PersonNode, moverSub: Set<string>;
+    const aHasIp = !!ipId && subA.has(ipId);
+    const bHasIp = !!ipId && subB.has(ipId);
+    if (aHasIp && !bHasIp) { mover = pb; anchor = pa; moverSub = subB; }
+    else if (bHasIp && !aHasIp) { mover = pa; anchor = pb; moverSub = subA; }
+    else if (siblingCountOf(originUnitOf(pa)) <= siblingCountOf(originUnitOf(pb))) { mover = pa; anchor = pb; moverSub = subA; }
+    else { mover = pb; anchor = pa; moverSub = subB; }
+
+    // anchor가 자기 형제군에서 좌/우 어느 끝인지로 이동 방향 결정
+    const anchorOrigin = originUnitOf(anchor);
+    const anchorSibs = anchorOrigin
+      ? nodes.filter(n => childIdsOf(anchorOrigin).includes(n.id) && placedIds.has(n.id))
+      : [anchor];
+    const anchorMinX = Math.min(...anchorSibs.map(n => n.layoutPosition.x));
+    const anchorMaxX = Math.max(...anchorSibs.map(n => n.layoutPosition.x));
+    const putLeft = Math.abs(anchor.layoutPosition.x - anchorMinX) <= Math.abs(anchor.layoutPosition.x - anchorMaxX);
+    const targetX = putLeft
+      ? anchor.layoutPosition.x - config.nodeWidthGap
+      : anchor.layoutPosition.x + config.nodeWidthGap;
+    const delta = targetX - mover.layoutPosition.x;
+    if (delta === 0) return;
+
+    moverSub.forEach(id => {
+      const n = nodes.find(x => x.id === id);
+      if (n) n.layoutPosition.x = Math.round(n.layoutPosition.x + delta);
+    });
+    console.log(`[3-4] 연결혼 인접 보정: ${mover.name} 가문을 ${anchor.name} ${putLeft ? '좌측' : '우측'}으로 ${delta} 이동`);
+  });
+
+  // ==========================================
+  // [단계 3-3] [#7] 같은 세대 노드 겹침 해소 (휴리스틱 안전망)
+  // 전파 배치 후에도 서로 다른 서브트리의 노드가 가로로 겹칠 수 있으므로,
+  // 각 세대에서 최소 간격(nodeMinGap)을 보장하도록 좌→우로 밀어내고,
+  // 세대의 중심을 보존하여 부모-자녀 정렬 틀어짐을 최소화한다.
+  // ==========================================
+  levels.forEach(level => {
+    const group = levelGroups[level]
+      .slice()
+      .sort((a, b) => (a.layoutPosition.x - b.layoutPosition.x) || (a.display_order - b.display_order));
+    if (group.length < 2) return;
+
+    const beforeMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+
+    // 좌→우로 최소 간격 보장 (겹치는 노드를 오른쪽으로 밀어냄)
+    for (let i = 1; i < group.length; i++) {
+      const minX = group[i - 1].layoutPosition.x + config.nodeMinGap;
+      if (group[i].layoutPosition.x < minX) {
+        group[i].layoutPosition.x = minX;
+      }
+    }
+
+    // 밀어내기로 이동한 무게중심을 원래 중심으로 되돌려 세대 정렬 보존
+    const afterMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+    const shift = beforeMid - afterMid;
+    if (shift !== 0) {
+      group.forEach(n => { n.layoutPosition.x = Math.round(n.layoutPosition.x + shift); });
+    }
+  });
 
   // ==========================================
   // [단계 4] IP 노드가 (0,0)에 오도록 전체 판 평행이동 오프셋 적용

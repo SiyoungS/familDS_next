@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSystemPrompt_bowen } from '@/lib/prompt-loader';
+import { normalizeRelLevels } from '@/lib/genograms/bowen/normalize-rellevel';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
 import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
 import { CallOpenAI } from './openai-route';
@@ -50,7 +51,9 @@ export async function POST(req: Request) {
     } else {
       throw new Error("Invalid API selection");
     }
-    const orderedData = reorderDisplayOrders(rawData);
+    const normalizedData = normalizeRelLevels(rawData);
+    console.log("Normalized relLevel (deterministic, IP-based)");
+    const orderedData = reorderDisplayOrders(normalizedData);
     console.log("Ordered Genogram Data");
     const processedData = calculateGenogramLayout(orderedData);
     console.log("Processed Genogram Data with Layout");
