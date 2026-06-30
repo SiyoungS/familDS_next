@@ -6,7 +6,7 @@ import { useAuth } from '../../providers/AuthProvider';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, isAuthenticated, loading } = useAuth();
+  const { login, loginWithGoogle, isAuthenticated, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -89,6 +89,22 @@ export default function LoginPage() {
                 className="w-full rounded-3xl bg-[#10b981] px-5 py-4 text-sm font-bold text-white shadow-lg shadow-[#10b981]/20 transition hover:bg-[#0d9b6d] disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? '로그인 중...' : '로그인'}
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  setErrorMessage('');
+                  try {
+                    await loginWithGoogle();
+                    router.push('/');
+                  } catch (err) {
+                    setErrorMessage(err instanceof Error ? err.message : '구글 로그인에 실패했습니다.');
+                  }
+                }}
+                className="mt-3 w-full rounded-3xl border border-gray-200 bg-white px-5 py-3 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+              >
+                구글로 로그인
               </button>
             </form>
 
