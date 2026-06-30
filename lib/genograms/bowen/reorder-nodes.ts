@@ -121,15 +121,16 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       const ipYoungerSiblings = insertSpouses(youngerSiblings.sort(byChildOrder));
 
       // 2구역: IP 관련 부부체제 수집
+      // IP의 배우자들을 결혼 순서(marriage_order)대로 수집
       const ipRelatedUnits = familyUnits.filter(fu => fu.parent_ids.includes(ipNode.id));
-      const ipCoupleSet = new Set<PersonNode>([ipNode]);
-      
-      ipRelatedUnits.forEach(fu => {
-        const partnerID = fu.parent_ids.find(pId => pId !== ipNode.id);
-        const partnerNode = partnerID ? nodeMap.get(partnerID) : null;
-        if (partnerNode) ipCoupleSet.add(partnerNode);
-      });
+      const ipSpouses = ipRelatedUnits
+        .map(fu => ({ order: fu.marriage_order || 0, node: nodeMap.get(fu.parent_ids.find(pId => pId !== ipNode.id) || '') }))
+        .filter((x): x is { order: number; node: PersonNode } => !!x.node)
+        .sort((a, b) => a.order - b.order)
+        .map(x => x.node);
 
+      // 블렌디드 가족: 현재 배우자의 이전 파트너 등은 맨 뒤(우측)에 덧붙임
+      const extraPartners: PersonNode[] = [];
       const spouseNode = group.find(n => n.attributes.is_spouse_of_ip);
       let spouseSiblings: PersonNode[] = [];
       if (spouseNode) {
@@ -138,7 +139,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
           const partnerID = fu.parent_ids.find(pId => pId !== spouseNode.id);
           const partnerNode = partnerID ? nodeMap.get(partnerID) : null;
           if (partnerNode && partnerNode.id !== ipNode.id) {
-            ipCoupleSet.add(partnerNode);
+            extraPartners.push(partnerNode);
           }
         });
 
@@ -146,7 +147,16 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         const findSpouseSiblings = filterSiblings(spouseNode.id);
         spouseSiblings = insertSpouses(findSpouseSiblings);
       }
-      const ipCouple = Array.from(ipCoupleSet);
+
+      // 단혼: [IP, 배우자] / 재혼: [이전 배우자들..., IP, 최근 배우자] (IP를 가운데로)
+      let ipCoupleOrdered: PersonNode[];
+      if (ipSpouses.length <= 1) {
+        ipCoupleOrdered = [ipNode, ...ipSpouses];
+      } else {
+        ipCoupleOrdered = [...ipSpouses.slice(0, -1), ipNode, ipSpouses[ipSpouses.length - 1]];
+      }
+      // extraPartners 포함하여 중복 제거(등장 순서 유지)
+      const ipCouple = Array.from(new Set<PersonNode>([...ipCoupleOrdered, ...extraPartners]));
       // 최종 병합 (좌→우): 손위형제, IP부부, 손아래형제, 배우자형제
       sortedGroup = [...ipOlderSiblings, ...ipCouple, ...ipYoungerSiblings, ...spouseSiblings];
       console.log("1. Gen 0 : sortedGroup = ",sortedGroup.map(n => n.name));

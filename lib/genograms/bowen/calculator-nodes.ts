@@ -5,7 +5,7 @@ interface LayoutConfig {
   levelHeightGap: number;   // 세대 간 수직 간격 (기본 250px)
   lineMarginY: number;      // "ㄷ"자 수평선이 지나갈 세대 내 내부 마진 Y축 (기본 50px)
   canvasMargin: number;     // 캔버스에 둘 여백
-  nodeMinGap: number;       // [#7] 겹침 방지를 위한 같은 세대 노드 최소 간격 (기호 폭 기준, 기본 70px)
+  nodeMinGap: number;       // 겹침 방지 안전망: 같은 세대 노드 최소 간격 (기본 70px)
   betweenUnitOffsetY: number; // 부모 사이에 낀 유닛의 "ㄷ"자 보정 오프셋 (기본 160px)
 }
 
@@ -204,11 +204,19 @@ export function calculateGenogramLayout(
         }
       });
 
-      // 시퀀스 전체를 부부 중심점 기준으로 좌우 대칭 배치
-      const seqTotalWidth = (sequence.length - 1) * config.nodeWidthGap;
-      const seqStartX = coupleCenterX - seqTotalWidth / 2;
+      // '혈연 자녀(allChildIds)'의 중심이 부부 중점에 오도록 시퀀스를 배치한다.
+      // (끼워 넣은 배우자는 옆에 따라오되, 자녀가 부부 중점에서 밀려나지 않게 함
+      //  → 단일 자녀+익명 배우자 체인에서 연결선이 끊기던 문제 해결)
+      const provisional = sequence.map((_, i) => i * config.nodeWidthGap);
+      const bloodPos = sequence
+        .map((n, i) => (allChildIds.includes(n.id) ? provisional[i] : null))
+        .filter((v): v is number => v != null);
+      const bloodCenter = bloodPos.length > 0
+        ? (Math.min(...bloodPos) + Math.max(...bloodPos)) / 2
+        : (provisional[0] + provisional[provisional.length - 1]) / 2;
+      const shiftX = coupleCenterX - bloodCenter;
       sequence.forEach((node, index) => {
-        node.layoutPosition.x = Math.round(seqStartX + (index * config.nodeWidthGap));
+        node.layoutPosition.x = Math.round(provisional[index] + shiftX);
         placedIds.add(node.id);
       });
     });
@@ -313,33 +321,104 @@ export function calculateGenogramLayout(
   });
 
   // ==========================================
+  // [단계 3-5] 다중혼(결혼 2회 이상)인 부모의 표준 배치
+  // 각 결혼의 자녀를 그 '부부 중점' 아래에 균일 간격으로 두고(자녀는 부부 안쪽
+  // = inset), 배우자를 바깥으로 벌려 결혼-자녀 줄기선이 항상 부부 중점에서
+  // 일직선으로 내려가도록 한다. (IP를 기준으로 왼쪽/오른쪽 결혼을 나눠 배치)
+  // ==========================================
+  const moveSubtree = (rootId: string, excludeUnitId: string, dx: number) => {
+    if (dx === 0) return;
+    collectSubtree(rootId, excludeUnitId).forEach(id => {
+      const n = nodes.find(x => x.id === id);
+      if (n) n.layoutPosition.x = Math.round(n.layoutPosition.x + dx);
+    });
+  };
+  const GAP = config.nodeWidthGap;
+
+  nodes.forEach(centerNode => {
+    const marriages = familyUnits
+      .filter(u => u.parent_ids.includes(centerNode.id) && childIdsOf(u).length > 0)
+      .map(u => {
+        const spouse = nodes.find(n => n.id === u.parent_ids.find(id => id !== centerNode.id));
+        const kids = childIdsOf(u)
+          .map(id => nodes.find(n => n.id === id))
+          .filter((k): k is PersonNode => !!k && placedIds.has(k.id))
+          .sort((a, b) => a.display_order - b.display_order);
+        return { u, spouse, kids, width: Math.max(0, (kids.length - 1) * GAP) };
+      })
+      .filter((m): m is { u: FamilyUnit; spouse: PersonNode; kids: PersonNode[]; width: number } =>
+        !!m.spouse && m.kids.length > 0);
+    if (marriages.length < 2) return; // 다중혼만 대상 (단혼은 기존 배치 유지)
+
+    const cx = centerNode.layoutPosition.x;
+    // IP 기준 왼쪽/오른쪽 결혼 (각각 IP에 가까운 것부터)
+    const left = marriages.filter(m => m.spouse.layoutPosition.x < cx)
+      .sort((a, b) => b.spouse.layoutPosition.x - a.spouse.layoutPosition.x);
+    const right = marriages.filter(m => m.spouse.layoutPosition.x >= cx)
+      .sort((a, b) => a.spouse.layoutPosition.x - b.spouse.layoutPosition.x);
+
+    // 한 쪽(왼/오른쪽)을 IP에 가까운 결혼부터 최소 간격으로 배치한다.
+    // 각 결혼의 부부 간격(coupleGap) = max(자녀를 담는 최소폭, 이전 배우자보다 한 칸 바깥).
+    //  - 자녀 n명 최소폭 = n*GAP (자녀폭 (n-1)*GAP + 양쪽 inset GAP/2)
+    //  - 안쪽 자녀는 항상 IP에서 GAP/2 떨어져, 반대편 결혼 자녀와 GAP 간격 확보
+    const placeSide = (list: typeof marriages, dir: 1 | -1) => {
+      let prevGap = 0; // 직전(더 안쪽) 배우자까지의 거리
+      list.forEach(m => {
+        const ownGap = m.kids.length * GAP;        // 자녀를 inset으로 담는 최소 부부 간격
+        const spaceGap = prevGap + GAP;            // 직전 배우자보다 한 칸 바깥
+        const coupleGap = Math.max(ownGap, spaceGap);
+        const spouseX = cx + dir * coupleGap;
+        const mid = cx + dir * (coupleGap / 2);    // 부부 중점 = 자녀 블록 중심
+        const startX = mid - m.width / 2;
+        m.kids.forEach((k, i) =>
+          moveSubtree(k.id, m.u.id, Math.round(startX + i * GAP) - k.layoutPosition.x));
+        moveSubtree(m.spouse.id, m.u.id, Math.round(spouseX) - m.spouse.layoutPosition.x);
+        prevGap = coupleGap;
+      });
+    };
+    placeSide(left, -1);
+    placeSide(right, 1);
+    console.log(`[3-5] 다중혼 배치: ${centerNode.name} (좌${left.length}/우${right.length})`);
+  });
+
+  // ==========================================
   // [단계 3-3] [#7] 같은 세대 노드 겹침 해소 (휴리스틱 안전망)
   // 전파 배치 후에도 서로 다른 서브트리의 노드가 가로로 겹칠 수 있으므로,
-  // 각 세대에서 최소 간격(nodeMinGap)을 보장하도록 좌→우로 밀어내고,
-  // 세대의 중심을 보존하여 부모-자녀 정렬 틀어짐을 최소화한다.
+  // 최소 간격(nodeMinGap)을 보장하도록 좌→우로 밀어내고 중심을 보존한다.
+  // 단, 같은 세대라도 Y가 다르면(예: 다중혼 사이에 낀 결혼의 자녀가 더 아래로
+  // 내려간 경우) 시각적으로 겹치지 않으므로 같은 Y끼리만 간격을 적용한다.
   // ==========================================
   levels.forEach(level => {
-    const group = levelGroups[level]
-      .slice()
-      .sort((a, b) => (a.layoutPosition.x - b.layoutPosition.x) || (a.display_order - b.display_order));
-    if (group.length < 2) return;
+    const byY = new Map<number, PersonNode[]>();
+    levelGroups[level].forEach(n => {
+      const key = n.layoutPosition.y;
+      if (!byY.has(key)) byY.set(key, []);
+      byY.get(key)!.push(n);
+    });
 
-    const beforeMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+    byY.forEach(rowNodes => {
+      const group = rowNodes
+        .slice()
+        .sort((a, b) => (a.layoutPosition.x - b.layoutPosition.x) || (a.display_order - b.display_order));
+      if (group.length < 2) return;
 
-    // 좌→우로 최소 간격 보장 (겹치는 노드를 오른쪽으로 밀어냄)
-    for (let i = 1; i < group.length; i++) {
-      const minX = group[i - 1].layoutPosition.x + config.nodeMinGap;
-      if (group[i].layoutPosition.x < minX) {
-        group[i].layoutPosition.x = minX;
+      const beforeMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+
+      // 좌→우로 최소 간격 보장 (겹치는 노드를 오른쪽으로 밀어냄)
+      for (let i = 1; i < group.length; i++) {
+        const minX = group[i - 1].layoutPosition.x + config.nodeMinGap;
+        if (group[i].layoutPosition.x < minX) {
+          group[i].layoutPosition.x = minX;
+        }
       }
-    }
 
-    // 밀어내기로 이동한 무게중심을 원래 중심으로 되돌려 세대 정렬 보존
-    const afterMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
-    const shift = beforeMid - afterMid;
-    if (shift !== 0) {
-      group.forEach(n => { n.layoutPosition.x = Math.round(n.layoutPosition.x + shift); });
-    }
+      // 밀어내기로 이동한 무게중심을 원래 중심으로 되돌려 정렬 보존
+      const afterMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+      const shift = beforeMid - afterMid;
+      if (shift !== 0) {
+        group.forEach(n => { n.layoutPosition.x = Math.round(n.layoutPosition.x + shift); });
+      }
+    });
   });
 
   // ==========================================
@@ -355,12 +434,18 @@ export function calculateGenogramLayout(
 
   // ==========================================
   // [단계 5] 가족 단위(FamilyUnit)의 "ㄷ"자 꺾임 중심점 최종 연산
+  // 자녀로 내려가는 줄기선(x)은 부부 중점이 아니라 '자녀들의 중심'에 맞춰
+  // 일직선으로 내려가도록 한다. (단, 줄기선이 부부 결합선 위에서 출발하도록
+  // 두 부모의 x 범위 안으로 클램프한다.)
   // ==========================================
   familyUnits.forEach(unit => {
     const parents = nodes.filter(n => unit.parent_ids.includes(n.id));
     if (parents.length === 2) {
       const p1 = parents[0].layoutPosition;
       const p2 = parents[1].layoutPosition;
+
+      // 줄기선 X: 항상 부부 중점. (다중혼은 [단계 3-5]에서 배우자를 벌려
+      // 자녀가 부부 중점 아래에 inset 되도록 맞췄으므로 중점=자녀중심이 된다.)
       const lineY = unit.lineY ? unit.lineY : 0;
       unit.lineCenterPosition = {
         x: Math.round((p1.x + p2.x) / 2),
