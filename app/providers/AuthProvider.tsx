@@ -20,6 +20,39 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
+
+const getDisplayName = (email: string | null | undefined, fallback = '사용자') => {
+  if (!email) return fallback;
+
+  const localPart = email.split('@')[0];
+  return localPart || fallback;
+};
+
+const getFriendlyErrorMessage = (error: unknown) => {
+  if (typeof error === 'object' && error && 'code' in error) {
+    const code = (error as { code?: string }).code;
+    switch (code) {
+      case 'auth/invalid-credential':
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+        return '이메일 또는 비밀번호가 올바르지 않습니다.';
+      case 'auth/email-already-in-use':
+        return '이미 사용 중인 이메일입니다.';
+      case 'auth/weak-password':
+        return '비밀번호는 최소 6자리 이상이어야 합니다.';
+      case 'auth/network-request-failed':
+        return '네트워크 연결을 확인해주세요.';
+      case 'auth/too-many-requests':
+        return '요청이 너무 많습니다. 잠시 후 다시 시도해주세요.';
+      default:
+        return '인증 처리 중 문제가 발생했습니다.';
+    }
+  }
+
+  return error instanceof Error ? error.message : '인증 처리 중 문제가 발생했습니다.';
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
