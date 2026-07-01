@@ -12,7 +12,7 @@ import { Variants } from 'framer-motion';
 
 export default function Home() {
   const router = useRouter();
-  const { isAuthenticated, loading, logout } = useAuth();
+  const { isAuthenticated, isAdmin, loading, logout } = useAuth();
   const [cardVariant, setCardVariant] = useState<Variants>(cardVariantsInit);
   const [counselTarget, setCounselTarget] = useState(''); 
   const [counselText, setCounselText] = useState('');
@@ -83,11 +83,11 @@ export default function Home() {
         .finally(() => setAnalysisStep('results'));
     }
   };
-  // useEffect(() => {
-  //   if (!loading && !isAuthenticated) {
-  //     router.replace('/auth/login');
-  //   }
-  // }, [isAuthenticated, loading, router]);
+  useEffect(() => {
+    if (!loading && !isAuthenticated) {
+      router.replace('/auth/login');
+    }
+  }, [isAuthenticated, loading, router]);
 
   const handleReset = () => {
     setCounselText('');
@@ -103,17 +103,26 @@ export default function Home() {
     );
   }
 
-  // if (!isAuthenticated) {
-  //   return null;
-  // }
+  if (!isAuthenticated) {
+    return null;
+  }
 
   return (
     <div className="relative w-full h-screen bg-[#ffffff] overflow-hidden font-sans select-none flex">
-      <div className="absolute right-6 top-6 z-50">
+      <div className="absolute right-6 top-6 z-50 flex gap-2">
+        {isAdmin ? (
+          <button
+            type="button"
+            onClick={() => router.push('/admin')}
+            className="rounded-2xl border border-[#d1d5db] bg-white px-5 py-2 text-sm font-semibold text-[#111827] shadow-sm transition hover:border-[#10b981] hover:text-[#10b981]"
+          >
+            관리자
+          </button>
+        ) : null}
         <button
           type="button"
-          onClick={() => {
-            logout();
+          onClick={async () => {
+            await logout();
             router.push('/auth/login');
           }}
           className="rounded-2xl border border-[#d1d5db] bg-white px-5 py-2 text-sm font-semibold text-[#111827] shadow-sm transition hover:border-[#10b981] hover:text-[#10b981]"

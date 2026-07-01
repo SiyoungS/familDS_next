@@ -1,113 +1,98 @@
 'use client';
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';
+import { signInWithGoogle, firebaseSignOut } from '@/lib/firebase/client';
+import type { PublicUser } from '@/types/auth';
 
-type AuthUser = {
-  email: string;
-  name: string;
-};
+type LoginResult =
+  | { ok: true; user: PublicUser }
+  | { ok: false; user: PublicUser }; // 승인 대기/거부 (세션 미발급)
 
 type AuthState = {
-  user: AuthUser | null;
+  user: PublicUser | null;          // 승인되어 세션이 있는 사용자
   loading: boolean;
-  isAuthenticated: boolean;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
-  logout: () => void;
-  signup: (payload: { name: string; email: string; password: string }) => Promise<void>;
+  isAuthenticated: boolean;         // 승인 + 세션
+  isAdmin: boolean;
+  loginWithGoogle: (consent?: boolean) => Promise<LoginResult>;
+  logout: () => Promise<void>;
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
-const STORAGE_KEY = 'familDS-auth-user';
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        setUser(JSON.parse(raw));
-      } catch {
-        localStorage.removeItem(STORAGE_KEY);
+  // 현재 세션 확인 (없거나 만료면 null)
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user as PublicUser);
+      } else {
+        setUser(null);
       }
+    } catch {
+      setUser(null);
     }
-    setLoading(false);
   }, []);
 
-  const persistUser = (nextUser: AuthUser | null) => {
-    if (nextUser) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(nextUser));
-    } else {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-  };
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+      await refresh();
+      setLoading(false);
+    })();
+  }, [refresh]);
 
-  const login = async ({ email, password }: { email: string; password: string }) => {
+  const loginWithGoogle = useCallback(async (consent?: boolean): Promise<LoginResult> => {
     setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    try {
+      const { idToken } = await signInWithGoogle();
+      const res = await fetch('/api/auth/google', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ idToken, consent: consent === true }),
+      });
+      // 세션은 httpOnly 쿠키로만 관리 → firebase 세션은 정리(매 로그인 재인증)
+      await firebaseSignOut().catch(() => {});
 
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!normalizedEmail || !password.trim()) {
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || '로그인에 실패했습니다.');
+      }
+
+      if (data.authenticated) {
+        setUser(data.user as PublicUser);
+        return { ok: true, user: data.user as PublicUser };
+      }
+      // 승인 대기 또는 거부
+      setUser(null);
+      return { ok: false, user: data.user as PublicUser };
+    } finally {
       setLoading(false);
-      throw new Error('이메일과 비밀번호를 모두 입력해주세요.');
     }
+  }, []);
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(normalizedEmail)) {
-      setLoading(false);
-      throw new Error('올바른 이메일 형식이 아닙니다.');
-    }
-
-    const nextUser = {
-      email: normalizedEmail,
-      name: '사용자',
-    };
-
-    setUser(nextUser);
-    persistUser(nextUser);
-    setLoading(false);
-  };
-
-  const logout = () => {
+  const logout = useCallback(async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => {});
+    await firebaseSignOut().catch(() => {});
     setUser(null);
-    persistUser(null);
-  };
+  }, []);
 
-  const signup = async ({ name, email, password }: { name: string; email: string; password: string }) => {
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 200));
-
-    const normalizedEmail = email.trim().toLowerCase();
-    if (!name.trim() || !normalizedEmail || !password.trim()) {
-      setLoading(false);
-      throw new Error('모든 항목을 입력해주세요.');
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(normalizedEmail)) {
-      setLoading(false);
-      throw new Error('올바른 이메일 형식이 아닙니다.');
-    }
-
-    if (password.length < 6) {
-      setLoading(false);
-      throw new Error('비밀번호는 최소 6자리여야 합니다.');
-    }
-
-    setLoading(false);
-  };
-
-  const value = useMemo(
+  const value = useMemo<AuthState>(
     () => ({
       user,
       loading,
-      isAuthenticated: Boolean(user),
-      login,
+      isAuthenticated: Boolean(user && user.status === 'approved'),
+      isAdmin: user?.role === 'admin',
+      loginWithGoogle,
       logout,
-      signup,
+      refresh,
     }),
-    [user, loading]
+    [user, loading, loginWithGoogle, logout, refresh]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

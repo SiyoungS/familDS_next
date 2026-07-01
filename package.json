@@ -11,7 +11,9 @@
   "dependencies": {
     "@google/genai": "^2.7.0",
     "@next/env": "^16.2.4",
+    "firebase": "^12.15.0",
     "framer-motion": "^12.40.0",
+    "jose": "^6.2.3",
     "mongodb": "^7.2.0",
     "next": "16.2.4",
     "openai": "^6.35.0",

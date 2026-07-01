@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import GenogramModal from "./(genograms)/GenogramModal";
@@ -32,7 +33,9 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           {children}
-          <GenogramModal />
+          <Suspense fallback={null}>
+            <GenogramModal />
+          </Suspense>
         </AuthProvider>
       </body>
     </html>

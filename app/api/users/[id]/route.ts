@@ -6,10 +6,11 @@ import { userUpdateSchema } from '@/lib/validations/user';
 // PATCH /api/users/:id - 기존 사용자 정보 수정(update)
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!ObjectId.isValid(params.id)) {
+    const { id } = await params;
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json({ success: false, error: '유효하지 않은 사용자 ID입니다.' }, { status: 400 });
     }
     const body = await request.json();
@@ -34,7 +35,7 @@ export async function PATCH(
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_PROJECT_NAME);
     const updateResult = await db.collection('users').updateOne(
-      { _id: new ObjectId(params.id) },
+      { _id: new ObjectId(id) },
       { $set: validatedData.data }
     );
     if (updateResult.matchedCount === 0) {
@@ -78,18 +79,19 @@ export async function PATCH(
 // DELETE /api/users/:id - 기존 사용자 삭제(delete)
 export async function DELETE(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    if (!ObjectId.isValid(params.id)) {
+    const { id } = await params;
+    if (!ObjectId.isValid(id)) {
       return NextResponse.json(
-        { success: false, error: '유효하지 않은 유저 ID입니다.' }, 
+        { success: false, error: '유효하지 않은 유저 ID입니다.' },
         { status: 400 }
       );
     }
     const client = await clientPromise;
     const db = client.db(process.env.MONGODB_PROJECT_NAME);
-    const deleteResult = await db.collection('users').deleteOne({ _id: new ObjectId(params.id) });
+    const deleteResult = await db.collection('users').deleteOne({ _id: new ObjectId(id) });
     if (deleteResult.deletedCount === 0) {
       return NextResponse.json(
         { success: false, error: '해당 유저를 찾을 수 없습니다.' }, 
