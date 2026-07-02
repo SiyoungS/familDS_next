@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import GenogramModal from "./(genograms)/GenogramModal";
 import { AuthProvider } from "./providers/AuthProvider";
+import { HistoryProvider } from "./providers/HistoryProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,10 +33,12 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          {children}
-          <Suspense fallback={null}>
-            <GenogramModal />
-          </Suspense>
+          <HistoryProvider>
+            {children}
+            <Suspense fallback={null}>
+              <GenogramModal />
+            </Suspense>
+          </HistoryProvider>
         </AuthProvider>
       </body>
     </html>

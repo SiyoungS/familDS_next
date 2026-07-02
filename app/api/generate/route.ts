@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server';
 
 import { getSystemPrompt_bowen } from '@/lib/prompt-loader';
-import { normalizeRelLevels } from '@/lib/genograms/bowen/normalize-rellevel';
-import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
-import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
+import { processGenogramData } from '@/lib/genograms/bowen/process';
 import { CallOpenAI } from './openai-route';
 import { ApiMode } from '@/types/api-loaders.type';
 import { CallGemini } from './genai-route';
@@ -51,14 +49,10 @@ export async function POST(req: Request) {
     } else {
       throw new Error("Invalid API selection");
     }
-    const normalizedData = normalizeRelLevels(rawData);
-    console.log("Normalized relLevel (deterministic, IP-based)");
-    const orderedData = reorderDisplayOrders(normalizedData);
-    console.log("Ordered Genogram Data");
-    const processedData = calculateGenogramLayout(orderedData);
+    const processedData = processGenogramData(rawData);
     console.log("Processed Genogram Data with Layout");
-    console.log('Processed Genogram Data:', JSON.stringify(processedData));// 디버깅용 로그
-    return NextResponse.json(processedData);
+    // raw(가공 전)는 히스토리 저장/재처리용, processed는 화면 표시용
+    return NextResponse.json({ raw: rawData, processed: processedData });
   } catch (error) {
     return NextResponse.json({ error: "Data generation failed" }, { status: 500 });
   }

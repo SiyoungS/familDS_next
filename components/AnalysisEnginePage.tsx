@@ -33,14 +33,18 @@ export default function AnalysisEnginePage({
     >
       <button
         onClick={() => setIsMenuOpen(!isMenuOpen)}
-        className={`absolute left-0 top-1/2 -translate-y-1/2 -translate-x-full h-24 w-10 rounded-l-2xl border-y border-l border-gray-100 bg-white shadow-[-6px_0_15px_rgba(0,0,0,0.03)] flex flex-col items-center justify-center text-gray-400 hover:text-gray-700 transition-all z-50
-          hover:cursor-pointer
-          ${!isMenuOpen ? 'animate-pulse ring-4 ring-[#10b981]/10' : ''}
+        className={`absolute left-0 top-1/2 -translate-y-1/2 h-24 w-10 border-y border-gray-100 bg-white flex flex-col items-center justify-center text-gray-400 hover:text-gray-700 transition-all z-50 hover:cursor-pointer
+          ${isMenuOpen
+            // 열림: 소형(w-full)은 패널 안쪽으로 들어와 세로축 미러(오른쪽으로 접힘), lg는 기존처럼 바깥 왼쪽 탭
+            ? 'translate-x-0 rounded-r-2xl border-r shadow-[6px_0_15px_rgba(0,0,0,0.03)] lg:-translate-x-full lg:rounded-r-none lg:border-r-0 lg:rounded-l-2xl lg:border-l lg:shadow-[-6px_0_15px_rgba(0,0,0,0.03)]'
+            // 닫힘: 항상 바깥 왼쪽(오픈 핸들)
+            : '-translate-x-full rounded-l-2xl border-l shadow-[-6px_0_15px_rgba(0,0,0,0.03)] animate-pulse ring-4 ring-[#10b981]/10'}
         `}
         title={isMenuOpen ? "메뉴 숨기기" : "분석 엔진 열기"}
       >
         {isMenuOpen ? (
-          <svg className="w-4 h-4 text-[#10b981] transition-transform duration-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          // 소형(w-full)에서는 미러된 탭에 맞춰 화살표도 세로축 반전
+          <svg className="w-4 h-4  text-[#10b981] transition-transform duration-300 lg:scale-x-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7" />
           </svg>
         ) : (

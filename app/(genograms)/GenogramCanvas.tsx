@@ -52,15 +52,16 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         // 정렬 엔진이 계산해 둔 "ㄷ"자 결합선 허브 좌표 활용
         coupleMidX = unit.lineCenterPosition.x;
 
-        const hasInterruption = processedData.nodes.some(n => 
-          n.relLevel === parents[0].node?.relLevel && 
+        // 부부 사이에 낀 노드가 '자식을 가진 부모'일 때만 결합선을 깊게 우회한다.
+        // (자식 없는 leaf 형제는 우회 불필요 → 얕은 결합선 유지, 자녀선이 어긋나지 않음)
+        const hasInterruption = processedData.nodes.some(n =>
+          n.relLevel === parents[0].node?.relLevel &&
           n.layoutPosition.x > Math.min(p1.x, p2.x) && n.layoutPosition.x < Math.max(p1.x, p2.x) &&
-          !unit.parent_ids.includes(n.id)
+          !unit.parent_ids.includes(n.id) &&
+          processedData.familyUnits.some(u =>
+            u.parent_ids.includes(n.id) && (u.childGroups?.some(g => g.child_ids.length > 0))
+          )
         );
-        const interruptionNode = processedData.nodes.find(n => {
-          n.layoutPosition.x > Math.min(p1.x, p2.x) && n.layoutPosition.x < Math.max(p1.x, p2.x) &&
-          n.layoutPosition.y 
-        })
         const currentDepth = hasInterruption ? marriageLineDepth + 150 : marriageLineDepth;
         coupleBottomY = unit.lineCenterPosition.y + currentDepth;
         // 부부 "ㄷ"자 수평선 긋기 (노드 하단 마진 25px 확보 후 아래로 꺾임)

@@ -1,11 +1,16 @@
 'use client';
 
 import AnalysisEnginePage from '@/components/AnalysisEnginePage';
+import FloatingAccountControls from '@/components/FloatingAccountControls';
+import HistoryPanel from '@/components/HistoryPanel';
 import RelationAnalysisPage from '@/components/RelationAnalysisPage';
 import { BWGenogramData } from '@/types/bowengenogram.types';
+import { HistoryItem } from '@/types/history';
+import { processGenogramData } from '@/lib/genograms/bowen/process';
 import { JSX, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from './providers/AuthProvider';
+import { useHistory } from './providers/HistoryProvider';
 import GenogramCanvas from './(genograms)/GenogramCanvas';
 import RelationAnalysisCenterCard, { cardVariantsInit, cardVariants } from '@/components/RelationAnalysisCenterCard';
 import { Variants } from 'framer-motion';
@@ -13,10 +18,12 @@ import { Variants } from 'framer-motion';
 export default function Home() {
   const router = useRouter();
   const { isAuthenticated, isAdmin, loading, logout } = useAuth();
+  const { addHistory } = useHistory();
   const [cardVariant, setCardVariant] = useState<Variants>(cardVariantsInit);
-  const [counselTarget, setCounselTarget] = useState(''); 
+  const [counselTarget, setCounselTarget] = useState('');
   const [counselText, setCounselText] = useState('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [analysisStep, setAnalysisStep] = useState<'input' | 'analyzing' | 'results' >('input');
 
   const [data, setData] = useState<BWGenogramData | null>(null);
@@ -65,12 +72,14 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ counselText: counselText, counselTarget: counselTarget })
       })
-      .then(res => {
-        // if (!res.ok) throw new Error('데이터 생성 실패');
-        console.log('Raw response from /api/generate:', res); // 디버깅용 로그
-        return res.json();
+      .then(res => res.json())
+      .then((result) => {
+        // { raw: 가공 전, processed: 표시용 }
+        setData(result.processed ?? result);
+        if (result?.raw) {
+          addHistory({ counselTarget, counselText, raw: result.raw });
+        }
       })
-      .then(setData)
       .catch(err => {
         console.error(err);
         addToastMessage('가계도 생성에 실패했습니다. 다시 시도해주세요.');
@@ -88,6 +97,15 @@ export default function Home() {
       router.replace('/auth/login');
     }
   }, [isAuthenticated, loading, router]);
+
+  // 히스토리 항목 불러오기: 저장된 raw(가공 전)에 동일 후처리를 적용해 표시
+  const handleLoadHistory = (item: HistoryItem) => {
+    setCounselTarget(item.counselTarget);
+    setCounselText(item.counselText);
+    setData(processGenogramData(item.raw));
+    setAnalysisStep('results');
+    setIsHistoryOpen(false);
+  };
 
   const handleReset = () => {
     setCounselText('');
@@ -109,27 +127,17 @@ export default function Home() {
 
   return (
     <div className="relative w-full h-screen bg-[#ffffff] overflow-hidden font-sans select-none flex">
-      <div className="absolute right-6 top-6 z-50 flex gap-2">
-        {isAdmin ? (
-          <button
-            type="button"
-            onClick={() => router.push('/admin')}
-            className="rounded-2xl border border-[#d1d5db] bg-white px-5 py-2 text-sm font-semibold text-[#111827] shadow-sm transition hover:border-[#10b981] hover:text-[#10b981]"
-          >
-            관리자
-          </button>
-        ) : null}
-        <button
-          type="button"
-          onClick={async () => {
-            await logout();
-            router.push('/auth/login');
-          }}
-          className="rounded-2xl border border-[#d1d5db] bg-white px-5 py-2 text-sm font-semibold text-[#111827] shadow-sm transition hover:border-[#10b981] hover:text-[#10b981]"
-        >
-          로그아웃
-        </button>
-      </div>
+      <FloatingAccountControls
+        isFullscreen={isMenuOpen}
+        isAdmin={isAdmin}
+        isHistoryOpen={isHistoryOpen}
+        onHistory={() => setIsHistoryOpen((v) => !v)}
+        onAdmin={() => router.push('/admin')}
+        onLogout={async () => {
+          await logout();
+          router.push('/auth/login');
+        }}
+      />
       <RelationAnalysisPage isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
       children={
         (analysisStep === 'results' && data) ? (
@@ -155,7 +163,14 @@ export default function Home() {
         handleReset={handleReset}
         handleAnalyze={handleAnalyze}
       />
-      
+
+      {/* 히스토리 패널: 분석 엔진 '다음'에 배치해 항상 위에 표시 */}
+      <HistoryPanel
+        isOpen={isHistoryOpen}
+        setIsOpen={setIsHistoryOpen}
+        onLoad={handleLoadHistory}
+      />
+
       {Object.keys(toastMessageList).length > 0 && (
         Object.values(toastMessageList)[0]
       )}

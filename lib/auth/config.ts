@@ -5,6 +5,7 @@ export const FIREBASE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID |
 // DB명: MONGODB_DB_NAME 우선, 없으면 기존 MONGODB_PROJECT_NAME 사용(하위호환)
 export const DB_NAME = process.env.MONGODB_DB_NAME || process.env.MONGODB_PROJECT_NAME || '';
 export const USERS_COLLECTION = process.env.MONGODB_USERS_COLLECTION || 'users';
+export const HISTORY_COLLECTION = process.env.MONGODB_HISTORY_COLLECTION || 'histories';
 
 // 세션 쿠키 이름
 export const SESSION_COOKIE = 'familyds_session';
