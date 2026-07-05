@@ -19,6 +19,8 @@ export default function FloatingAccountControls({
   isHistoryOpen,
   onHistory,
   onAdmin,
+  onInquiry,
+  onMyPage,
   onLogout,
 }: {
   isFullscreen: boolean;
@@ -26,6 +28,8 @@ export default function FloatingAccountControls({
   isHistoryOpen: boolean;
   onHistory: () => void;
   onAdmin: () => void;
+  onInquiry: () => void;
+  onMyPage: () => void;
   onLogout: () => void | Promise<void>;
 }) {
   const [expanded, setExpanded] = useState(!isFullscreen);
@@ -102,6 +106,26 @@ export default function FloatingAccountControls({
           </svg>
         </button>
 
+        <button
+          type="button"
+          onClick={() => {
+            collapse();
+            onInquiry();
+          }}
+          className="rounded-full px-5 py-2 text-sm font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
+        >
+          문의하기
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            collapse();
+            onMyPage();
+          }}
+          className="rounded-full px-5 py-2 text-sm font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
+        >
+          마이페이지
+        </button>
         {isAdmin ? (
           <button
             type="button"

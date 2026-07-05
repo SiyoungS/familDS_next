@@ -133,6 +133,8 @@ export default function Home() {
         isHistoryOpen={isHistoryOpen}
         onHistory={() => setIsHistoryOpen((v) => !v)}
         onAdmin={() => router.push('/admin')}
+        onInquiry={() => router.push('/inquiry')}
+        onMyPage={() => router.push('/mypage')}
         onLogout={async () => {
           await logout();
           router.push('/auth/login');

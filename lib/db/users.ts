@@ -91,3 +91,17 @@ export async function updateUserStatus(email: string, status: AppUser['status'])
   );
   return res.matchedCount > 0;
 }
+
+export async function withdrawUserAccount(email: string): Promise<boolean> {
+  const col = await getUsersCollection();
+  const res = await col.updateOne(
+    { email: email.toLowerCase() },
+    {
+      $set: {
+        status: 'deleted',
+        deletedAt: new Date(),
+      },
+    }
+  );
+  return res.matchedCount > 0;
+}

@@ -8,7 +8,7 @@ type AdminUser = {
   email: string;
   name: string;
   role: 'admin' | 'user';
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'approved' | 'rejected' | 'deleted';
   photoURL?: string;
   createdAt: string;
   lastLoginAt: string | null;
@@ -19,11 +19,13 @@ const STATUS_LABEL: Record<AdminUser['status'], string> = {
   pending: '승인 대기',
   approved: '승인됨',
   rejected: '거부됨',
+  deleted: '탈퇴함',
 };
 const STATUS_STYLE: Record<AdminUser['status'], string> = {
   pending: 'bg-amber-100 text-amber-800',
   approved: 'bg-emerald-100 text-emerald-800',
   rejected: 'bg-red-100 text-red-700',
+  deleted: 'bg-slate-200 text-slate-700',
 };
 
 export default function AdminPage() {

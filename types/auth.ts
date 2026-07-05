@@ -1,7 +1,7 @@
 // 인증/권한 관련 타입
 
 export type UserRole = 'admin' | 'user';
-export type UserStatus = 'pending' | 'approved' | 'rejected';
+export type UserStatus = 'pending' | 'approved' | 'rejected' | 'deleted';
 
 // DB에 저장되는 사용자 문서
 export interface AppUser {
