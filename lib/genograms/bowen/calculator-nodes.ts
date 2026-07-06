@@ -397,26 +397,52 @@ export function calculateGenogramLayout(
     });
 
     byY.forEach(rowNodes => {
-      const group = rowNodes
-        .slice()
-        .sort((a, b) => (a.layoutPosition.x - b.layoutPosition.x) || (a.display_order - b.display_order));
-      if (group.length < 2) return;
+      if (rowNodes.length < 2) return;
 
-      const beforeMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+      // 인접한 두 부모(부부)를 'rigid 그룹'으로 묶어 통째로 이동한다.
+      // (부부를 개별로 밀면 간격이 찌그러져 자녀선이 어긋남)
+      // 단, 배우자가 여럿인 다중혼 부모는 묶지 않는다(개별 처리) → 순서 왜곡 방지.
+      const rowIds = new Set(rowNodes.map(n => n.id));
+      // 이 행 안에서 각 노드의 '배우자(co-parent)' 수
+      const partnerCount = (id: string) =>
+        familyUnits.filter(u =>
+          u.parent_ids.length === 2 && u.parent_ids.includes(id) &&
+          u.parent_ids.some(pid => pid !== id && rowIds.has(pid))
+        ).length;
+      const sorted = rowNodes.slice().sort((a, b) => a.layoutPosition.x - b.layoutPosition.x);
+      const groups: PersonNode[][] = [];
+      for (let i = 0; i < sorted.length; ) {
+        const n = sorted[i];
+        const m = sorted[i + 1];
+        const isCouple = !!m &&
+          partnerCount(n.id) === 1 && partnerCount(m.id) === 1 &&
+          familyUnits.some(u => u.parent_ids.length === 2 && u.parent_ids.includes(n.id) && u.parent_ids.includes(m.id));
+        if (isCouple) { groups.push([n, m]); i += 2; }
+        else { groups.push([n]); i += 1; }
+      }
+      if (groups.length < 2) return;
 
-      // 좌→우로 최소 간격 보장 (겹치는 노드를 오른쪽으로 밀어냄)
-      for (let i = 1; i < group.length; i++) {
-        const minX = group[i - 1].layoutPosition.x + config.nodeMinGap;
-        if (group[i].layoutPosition.x < minX) {
-          group[i].layoutPosition.x = minX;
-        }
+      const groupLeft = (g: PersonNode[]) => Math.min(...g.map(n => n.layoutPosition.x));
+      const groupRight = (g: PersonNode[]) => Math.max(...g.map(n => n.layoutPosition.x));
+      groups.sort((a, b) => groupLeft(a) - groupLeft(b));
+
+      const allX = rowNodes.map(n => n.layoutPosition.x);
+      const beforeMid = (Math.min(...allX) + Math.max(...allX)) / 2;
+
+      // 좌→우로 그룹 간 최소 간격 보장 (그룹은 통째로 이동)
+      for (let i = 1; i < groups.length; i++) {
+        const need = groupRight(groups[i - 1]) + config.nodeMinGap - groupLeft(groups[i]);
+        if (need > 0) groups[i].forEach(n => { n.layoutPosition.x += need; });
       }
 
-      // 밀어내기로 이동한 무게중심을 원래 중심으로 되돌려 정렬 보존
-      const afterMid = (group[0].layoutPosition.x + group[group.length - 1].layoutPosition.x) / 2;
+      // 무게중심 보존
+      const allX2 = rowNodes.map(n => n.layoutPosition.x);
+      const afterMid = (Math.min(...allX2) + Math.max(...allX2)) / 2;
       const shift = beforeMid - afterMid;
       if (shift !== 0) {
-        group.forEach(n => { n.layoutPosition.x = Math.round(n.layoutPosition.x + shift); });
+        rowNodes.forEach(n => { n.layoutPosition.x = Math.round(n.layoutPosition.x + shift); });
+      } else {
+        rowNodes.forEach(n => { n.layoutPosition.x = Math.round(n.layoutPosition.x); });
       }
     });
   });
@@ -443,12 +469,28 @@ export function calculateGenogramLayout(
     if (parents.length === 2) {
       const p1 = parents[0].layoutPosition;
       const p2 = parents[1].layoutPosition;
+      const parentMidX = (p1.x + p2.x) / 2;
 
-      // 줄기선 X: 항상 부부 중점. (다중혼은 [단계 3-5]에서 배우자를 벌려
-      // 자녀가 부부 중점 아래에 inset 되도록 맞췄으므로 중점=자녀중심이 된다.)
+      const childXs = (unit.childGroups || [])
+        .flatMap(g => g.child_ids)
+        .map(id => nodes.find(n => n.id === id)?.layoutPosition.x)
+        .filter((v): v is number => v != null);
+
+      // 3회 이상 재혼 부부는 결혼선이 여러 배우자를 가로지르므로 '부부 중점'을 유지.
+      // 그 외(단혼·재혼 1회)는 줄기선을 '자녀 중심'에 맞춰 자녀로 일직선으로 내린다.
+      const maxMarriages = Math.max(
+        1,
+        ...unit.parent_ids.map(pid => familyUnits.filter(u => u.parent_ids.includes(pid) && childIdsOf(u).length > 0).length)
+      );
+      let stemX = (maxMarriages < 3 && childXs.length > 0)
+        ? (Math.min(...childXs) + Math.max(...childXs)) / 2
+        : parentMidX;
+      // 결합선(p1~p2) 범위 안으로 클램프 → 줄기선이 결합선 위에서 출발
+      stemX = Math.max(Math.min(p1.x, p2.x), Math.min(Math.max(p1.x, p2.x), stemX));
+
       const lineY = unit.lineY ? unit.lineY : 0;
       unit.lineCenterPosition = {
-        x: Math.round((p1.x + p2.x) / 2),
+        x: Math.round(stemX),
         y: Math.round((p1.y + p2.y) / 2 + config.lineMarginY + lineY)
       };
     }

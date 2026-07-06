@@ -64,7 +64,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         );
         const currentDepth = hasInterruption ? marriageLineDepth + 150 : marriageLineDepth;
         coupleBottomY = unit.lineCenterPosition.y + currentDepth;
-        // 부부 "ㄷ"자 수평선 긋기 (노드 하단 마진 25px 확보 후 아래로 꺾임)
+        // 부부 "ㄷ"자 수평선 긋기 (동거/혼외관계 common_law는 점선)
         elements.push(
           <path
             key={`marriage-${unit.id}-${idx}`}
@@ -72,10 +72,11 @@ export default function GenogramCanvas({ data: initialData }: Props) {
             fill="none"
             stroke="#333"
             strokeWidth="2"
+            strokeDasharray={unit.legal_status === 'common_law' ? '6 4' : undefined}
           />
         );
 
-        // 법적 상태에 따른 보완 선 (이혼: 사선 2개, 별거: 사선 1개)
+        // 상태 기호 (별거: 사선1, 이혼: 사선2, 이혼후재결합: ✕)
         if (unit.legal_status === 'divorced') {
           elements.push(
             <g key={`divorce-mark-${unit.id}`} stroke="#333" strokeWidth="2">
@@ -87,13 +88,34 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           elements.push(
             <line key={`sep-mark-${unit.id}`} x1={coupleMidX - 5} y1={coupleBottomY - 10} x2={coupleMidX + 5} y2={coupleBottomY + 10} stroke="#333" strokeWidth="2" />
           );
+        } else if (unit.legal_status === 'reconciled') {
+          // 이혼 후 재결합: 이혼선(사선 2개) 위에 반대 방향 사선 2개를 덧그어 '취소' 형태
+          elements.push(
+            <g key={`reconcile-mark-${unit.id}`} stroke="#333" strokeWidth="2">
+              {/* 이혼선 (//) */}
+              <line x1={coupleMidX - 8} y1={coupleBottomY - 10} x2={coupleMidX + 2} y2={coupleBottomY + 10} />
+              <line x1={coupleMidX - 2} y1={coupleBottomY - 10} x2={coupleMidX + 8} y2={coupleBottomY + 10} />
+              {/* 취소 (반대 방향 사선) */}
+              <line x1={coupleMidX + 8} y1={coupleBottomY - 10} x2={coupleMidX - 8} y2={coupleBottomY + 10} />
+            </g>
+          );
         }
 
-        // 결혼/이혼 상태 텍스트 표기
-        if (unit.marriage_year) {
-          const statusText = unit.legal_status === 'divorced' 
-            ? `m. ${unit.marriage_year}, d. ${unit.divorce_year || ''}`
-            : `m. ${unit.marriage_year}`;
+        // 관계 이벤트 년도 표기 (자료 기준: m. / LT / s. / d. / remar.)
+        const yy = (y: number) => (String(y).length > 2 ? String(y).slice(-2) : String(y));
+        let statusText = '';
+        if (unit.legal_status === 'common_law') {
+          const lt = unit.cohabitation_year ?? unit.marriage_year;
+          if (lt) statusText = `LT ${yy(lt)}`;
+        } else {
+          const parts: string[] = [];
+          if (unit.marriage_year) parts.push(`m. ${yy(unit.marriage_year)}`);
+          if (unit.separation_year) parts.push(`s. ${yy(unit.separation_year)}`);
+          if (unit.divorce_year) parts.push(`d. ${yy(unit.divorce_year)}`);
+          if (unit.reunion_year) parts.push(`remar. ${yy(unit.reunion_year)}`);
+          statusText = parts.join(' ');
+        }
+        if (statusText) {
           elements.push(
             <text key={`m-text-${unit.id}`} x={coupleMidX} y={coupleBottomY - 8} textAnchor="middle" fontSize="11" fontWeight="bold" fill="#475569">
               {statusText}
@@ -171,15 +193,25 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         childNodesWithPos.forEach((child, cIdx) => {
           if (!child.pos || processedTwinIds.has(child.id)) return;
           xCoords.push(child.pos.x); // 자녀 수평바의 X 좌표로 활용
-          elements.push(
-            <line
-              key={`child-v-${unit.id}-${cIdx}`}
-              x1={child.pos.x} y1={childBranchY}
-              x2={child.pos.x} y2={child.pos.y - 25}
-              stroke="#333"
-              strokeWidth="2"
-            />
-          );
+          const childNode = processedData.nodes.find(n => n.id === child.id);
+          const rel = childNode?.attributes.child_relation;
+          // 기호 상단까지 연결 (작은 손실/임신 기호는 짧게)
+          const t = childNode?.type;
+          const top = t === 'person' ? 25 : (t === 'fetus' || t === 'stillbirth') ? 12 : 8;
+          const y2 = child.pos.y - top;
+          if (rel === 'adopted') {
+            // 입양: 실선 + 점선 (선 2개)
+            elements.push(
+              <line key={`child-v-${unit.id}-${cIdx}-s`} x1={child.pos.x - 3} y1={childBranchY} x2={child.pos.x - 3} y2={y2} stroke="#333" strokeWidth="2" />,
+              <line key={`child-v-${unit.id}-${cIdx}-d`} x1={child.pos.x + 3} y1={childBranchY} x2={child.pos.x + 3} y2={y2} stroke="#333" strokeWidth="2" strokeDasharray="5 4" />
+            );
+          } else {
+            // 친자녀: 실선 / 위탁(foster): 점선
+            const dash = rel === 'foster' ? '5 4' : undefined;
+            elements.push(
+              <line key={`child-v-${unit.id}-${cIdx}`} x1={child.pos.x} y1={childBranchY} x2={child.pos.x} y2={y2} stroke="#333" strokeWidth="2" strokeDasharray={dash} />
+            );
+          }
         });
 
         // 자녀가 2명 이상일 때 가로로 길게 뻗는 수평 바(Bar) 렌더링
@@ -231,9 +263,26 @@ export default function GenogramCanvas({ data: initialData }: Props) {
 
             return (
               <g key={node.id} transform={`translate(${x}, ${y})`}>
-                {/* 1. 성별/타입별 도형 렌더링 기본 축 */}
+                {/* 1. 도형/기호 (자녀 손실·임신 타입 우선, 그 외 성별) */}
                 {node.type === 'fetus' ? (
-                  <polygon points="0,-25 25,20 -25,20" fill="white" stroke="#475569" strokeWidth="2" />
+                  // 임신: 작은 삼각형 (나이/기호가 들어가지 않으므로 작게)
+                  <polygon points="0,-12 12,10 -12,10" fill="white" stroke="#475569" strokeWidth="2" />
+                ) : node.type === 'stillbirth' ? (
+                  // 사산: 임신과 동일 크기의 네모 + X
+                  <g stroke="#475569" strokeWidth="2">
+                    <rect x={-11} y={-11} width={22} height={22} fill="white" />
+                    <line x1={-7} y1={-7} x2={7} y2={7} />
+                    <line x1={7} y1={-7} x2={-7} y2={7} />
+                  </g>
+                ) : node.type === 'miscarriage' ? (
+                  // 자연유산: 작은 채워진 원
+                  <circle r={7} fill="#475569" stroke="#475569" strokeWidth="1" />
+                ) : node.type === 'abortion' ? (
+                  // 인공유산: 작은 X (유산 원과 비슷한 크기)
+                  <g stroke="#475569" strokeWidth="2.5">
+                    <line x1={-7} y1={-7} x2={7} y2={7} />
+                    <line x1={7} y1={-7} x2={-7} y2={7} />
+                  </g>
                 ) : node.gender === 'male' ? (
                   <rect x={-25} y={-25} width={50} height={50} fill="white" stroke={isIP ? "#2563eb" : "#475569"} strokeWidth={isIP ? 3.5 : 2} />
                 ) : node.gender === 'female' ? (
@@ -243,8 +292,8 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                   <polygon points="0,-25 25,0 0,25 -25,0" fill="white" stroke="#475569" strokeWidth={2} />
                 )}
 
-                {/* 2. 사망 인물 처리 (기호 정중앙 대각선 X 표시) */}
-                {node.attributes.is_deceased && (
+                {/* 2. 사망 X: 일반 인물(person)만 (손실 기호는 자체 표기) */}
+                {node.type === 'person' && node.attributes.is_deceased && (
                   <g stroke="#94a3b8" strokeWidth="2">
                     <line x1={-20} y1={-20} x2={20} y2={20} />
                     <line x1={20} y1={-20} x2={-20} y2={20} />
@@ -258,6 +307,38 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                 {isIP && node.gender === 'female' && (
                   <circle r={20} fill="none" stroke="#2563eb" strokeWidth="1.5" />
                 )}
+
+                {/* 3.5 출생연도(좌상단) · 사망연도(우상단) · 나이(중앙, 최상위) — 일반 인물만 */}
+                {node.type === 'person' && (() => {
+                  const yy = (s?: string) => {
+                    if (!s) return '';
+                    const m4 = String(s).match(/\d{4}/);
+                    if (m4) return m4[0].slice(-2);
+                    const m2 = String(s).match(/\d{2}/);
+                    return m2 ? m2[0] : '';
+                  };
+                  let by = yy(node.attributes.birth_date);
+                  // 폴백: 출생연도 데이터가 없으면 나이로 추정 (현재 연도 - 나이)
+                  if (!by && node.attributes.age != null) {
+                    by = yy(String(new Date().getFullYear() - node.attributes.age));
+                  }
+                  const dy = yy(node.attributes.death_date);
+                  const showAge = node.attributes.age != null;
+                  return (
+                    <>
+                      {by ? (
+                        <text x={-28} y={-30} textAnchor="end" fontSize="10" fontWeight={600} fill="#64748b">{by}</text>
+                      ) : null}
+                      {dy ? (
+                        <text x={28} y={-30} textAnchor="start" fontSize="10" fontWeight={600} fill="#64748b">{dy}</text>
+                      ) : null}
+                      {/* 나이: 건강 색칠(배경) 위에 겹쳐 보이도록 최상위에 배치 */}
+                      {showAge ? (
+                        <text x={0} y={6} textAnchor="middle" fontSize="15" fontWeight={700} fill="#0f172a">{node.attributes.age}</text>
+                      ) : null}
+                    </>
+                  );
+                })()}
 
                 {/* 4. 하단 텍스트 이름표 및 출생 순위 라벨링 */}
                 {(() => {

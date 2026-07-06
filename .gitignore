@@ -52,3 +52,5 @@ mockdata.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+*prompt-relations.env.txt
+.prompt-relations.env.txt

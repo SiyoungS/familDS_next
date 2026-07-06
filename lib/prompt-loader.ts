@@ -17,3 +17,12 @@ export function getSystemPrompt_bowen(apiMode: ApiMode, thisYear: number): strin
   }
   return "";
 }
+
+// [프롬프트 체이닝 2차] 관계 추출용 시스템 프롬프트
+export function getRelationsPrompt(): string {
+  const filePath = path.join(
+    process.cwd(),
+    process.env.PROMPT_RELATIONS_FILE_PATH || './lib/prompt-relations.env.txt'
+  );
+  return fs.readFileSync(filePath, 'utf8');
+}

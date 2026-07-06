@@ -45,6 +45,9 @@ export interface PersonNode {
 
     birth_order: number;    // 가계도 가족단위 내에서 children의 출생 순서. 없으면 null. 태아도 null.
 
+    // 부모-자녀 연결선 유형: 친자녀(실선)/위탁(점선)/입양(실선+점선 2줄). 기본 biological.
+    child_relation?: 'biological' | 'adopted' | 'foster';
+
     // 현재 어떤 유닛에 속해있는가를 알려주는 아이디.
     primary_family_unit_id?: string; // 레이아웃의 중심이 되는 가족 단위 ID
   };
@@ -87,11 +90,16 @@ export interface FamilyUnit {
   id: string; // "FU1", "FU2" 등
   parent_ids: string[]; // [부, 모] 또는 [파트너1, 파트너2]
   childGroups: ChildGroup[]; // 출생 순서대로 정렬된 자녀들의 ID 배열
-  legal_status: 'married' | 'divorced' | 'separated' | 'common_law' | 'null';
-  
-  marriage_order: number;   
-  marriage_year?: number;
-  divorce_year?: number;
+  // married: 결혼(실선) / common_law: 동거·혼외관계(점선, LT) / separated: 별거(사선 1)
+  // divorced: 이혼(사선 2) / reconciled: 이혼 후 재결합(이혼선 위에 반대 사선으로 취소)
+  legal_status: 'married' | 'common_law' | 'separated' | 'divorced' | 'reconciled' | 'null';
+
+  marriage_order: number;
+  marriage_year?: number;      // m.  결혼 연도
+  cohabitation_year?: number;  // LT  동거/혼외 시작 연도
+  separation_year?: number;    // s.  별거 연도
+  divorce_year?: number;       // d.  이혼 연도
+  reunion_year?: number;       // remar. 이혼 후 재결합 연도
 
   // 레이아웃 엔진용: 부부 연결 수평선의 중심 좌표
   lineCenterPosition?: { x: number; y: number };

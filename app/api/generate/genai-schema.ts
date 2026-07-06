@@ -36,6 +36,7 @@ export const bwGenogramSchema = {
               death_date: { type: Type.STRING },
               age: { type: Type.NUMBER },
               birth_order: { type: Type.NUMBER },
+              child_relation: { type: Type.STRING, enum: ['biological', 'adopted', 'foster'] },
               primary_family_unit_id: { type: Type.STRING },
             },
             required: ["is_ip", "is_spouse_of_ip", "is_deceased"]
@@ -73,10 +74,13 @@ export const bwGenogramSchema = {
               }
             }
           },
-          legal_status: { type: Type.STRING, enum: ['married', 'divorced', 'separated', 'common_law', 'null'] },
+          legal_status: { type: Type.STRING, enum: ['married', 'common_law', 'separated', 'divorced', 'reconciled', 'null'] },
           marriage_order: { type: Type.NUMBER },
           marriage_year: { type: Type.NUMBER },
+          cohabitation_year: { type: Type.NUMBER },
+          separation_year: { type: Type.NUMBER },
           divorce_year: { type: Type.NUMBER },
+          reunion_year: { type: Type.NUMBER },
         },
         required: ["id", "parent_ids", "childGroups", "legal_status", "marriage_order"]
       }
