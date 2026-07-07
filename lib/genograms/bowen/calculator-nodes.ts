@@ -506,11 +506,22 @@ export function calculateGenogramLayout(
   const maxX = Math.max(...xValues);
   const maxY = Math.max(...yValues);
 
-  const dynamicWidth = (maxX - minX) + (config.canvasMargin * 2) + (config.nodeWidthGap * 2);
-  const dynamicHeight = (maxY - minY) + (config.canvasMargin * 2) + (config.levelHeightGap * 2);
-  
-  const shiftX = config.canvasMargin - minX;
-  const shiftY = config.canvasMargin - minY;
+  const contentWidth = (maxX - minX) + (config.canvasMargin * 2) + (config.nodeWidthGap * 2);
+  const contentHeight = (maxY - minY) + (config.canvasMargin * 2) + (config.levelHeightGap * 2);
+
+  // 기본 캔버스는 A4 가로(landscape, 96DPI ≈ 1123×794px) 기준.
+  // 내용이 더 크면 그만큼 캔버스를 키우고, 작으면 A4 크기를 유지한 채 가운데 정렬한다.
+  const A4_W = 1123;
+  const A4_H = 794;
+  const dynamicWidth = Math.max(A4_W, contentWidth);
+  const dynamicHeight = Math.max(A4_H, contentHeight);
+
+  // A4 여백만큼 남을 때 내용을 가운데로 이동시키는 보정값
+  const centerX = (dynamicWidth - contentWidth) / 2;
+  const centerY = (dynamicHeight - contentHeight) / 2;
+
+  const shiftX = config.canvasMargin - minX + centerX;
+  const shiftY = config.canvasMargin - minY + centerY;
 
   // 노드 좌표 평행 이동
   nodes.forEach(n => {
