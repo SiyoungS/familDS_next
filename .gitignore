@@ -54,3 +54,7 @@ mockdata.md
 next-env.d.ts
 *prompt-relations.env.txt
 .prompt-relations.env.txt
+
+# ai envs
+AGENTS.md
+CLAUDE.md

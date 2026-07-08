@@ -7,7 +7,9 @@ interface GeminiRequestBody {
   counselTarget: string;
   prompt: string;
 }
-type GeminiModelName = "gemini-3.5-flash" | "gemini-3.1-flash-lite";
+// type GeminiModelName = "gemini-3.5-flash" | "gemini-3.1-flash-lite";
+type GeminiModelName = "gemini-3.5-flash" | "gemini-3.1-flash-lite"|"gemini-2.5-flash";
+
 const genai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY!,
 });
@@ -18,7 +20,7 @@ const genai = new GoogleGenAI({
  */
 export async function CallGemini(
   requestBody: GeminiRequestBody,
-  modelName: GeminiModelName = "gemini-3.1-flash-lite"
+  modelName: GeminiModelName = "gemini-3.5-flash"
 ) {
   const { counselText, counselTarget, prompt } = requestBody;
   try {

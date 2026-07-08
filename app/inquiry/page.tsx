@@ -3,6 +3,7 @@
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers/AuthProvider';
+import FloatingAccountControls from '@/components/FloatingAccountControls';
 import type { InquiryAttachment, PublicInquiry } from '@/types/inquiry';
 
 function formatDate(dateString: string) {
@@ -32,7 +33,7 @@ async function readFileAsDataUrl(file: File): Promise<InquiryAttachment> {
 
 export default function InquiryPage() {
   const router = useRouter();
-  const { isAuthenticated, loading, isAdmin } = useAuth();
+  const { isAuthenticated, loading, isAdmin, logout } = useAuth();
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<InquiryAttachment[]>([]);
@@ -198,47 +199,58 @@ export default function InquiryPage() {
 
   if (loading || !isAuthenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-700">
-        <p>인증 상태를 확인 중입니다...</p>
+      <div className="min-h-screen flex items-center justify-center bg-[#f9fafb] text-gray-500">
+        <p className="text-sm">인증 상태를 확인 중입니다...</p>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#f8fafc] px-4 py-6 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-6xl space-y-6">
-        <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-sm shadow-slate-200/60">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold text-slate-900">{standardLabel}</h1>
-              <p className="mt-1 text-sm md:text-base text-slate-600">문의는 관리자에게만 공개되며, 다른 사용자에게는 비공개로 처리됩니다.</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push('/')}
-              className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700"
-            >
-              돌아가기
-            </button>
+    <div className="min-h-screen bg-[#f9fafb] px-4 py-8 font-sans">
+      <FloatingAccountControls
+        position="fixed"
+        collapseBelow={1024}
+        items={[
+          { key: 'home', label: '홈', onClick: () => router.push('/') },
+          { key: 'mypage', label: '마이페이지', onClick: () => router.push('/mypage') },
+          ...(isAdmin ? [{ key: 'admin', label: '관리자', onClick: () => router.push('/admin') }] : []),
+          { key: 'logout', label: '로그아웃', emphasized: true, onClick: async () => { await logout(); router.push('/auth/login'); } },
+        ]}
+      />
+      <div className="mx-auto w-full max-w-5xl">
+        <header className="mb-6 flex items-center justify-between pr-14 lg:pr-40">
+          <div>
+            <h1 className="text-2xl font-bold text-[#111827]">{standardLabel}</h1>
+            <p className="mt-1 text-sm text-gray-500">문의는 관리자에게만 공개됩니다.</p>
           </div>
-        </div>
+        </header>
 
-        <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-sm shadow-slate-200/60">
-          <div className="mb-4 text-sm md:text-base text-slate-600">
-            {isAdmin ? '관리자도 이 폼으로 새 문의를 등록할 수 있습니다.' : '문의 제목과 내용을 작성한 뒤 등록하면 관리자에게 전달됩니다.'}
+        {fetchError ? (
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{fetchError}</p>
+        ) : null}
+        {notification ? (
+          <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notification}</p>
+        ) : null}
+
+        <section className="mb-8">
+          <div className="mb-2 flex items-baseline gap-3">
+            <h2 className="text-lg font-bold text-[#111827]">문의 작성</h2>
+            <span className="text-xs text-gray-400">{isAdmin ? '관리자도 새 문의를 등록할 수 있습니다' : '작성 후 등록하면 관리자에게 전달됩니다'}</span>
           </div>
-          <form className="space-y-5" onSubmit={handleSubmit}>
-            <div>
-              <label className="mb-2 block text-sm md:text-base font-medium text-slate-700">제목</label>
-              <input
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-900 outline-none transition focus:border-slate-500"
-                placeholder="문의 제목을 입력하세요"
-              />
-            </div>
+          <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-6">
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div>
-                <label className="mb-2 block text-sm md:text-base font-medium text-slate-700">내용</label>
+                <label className="mb-2 block text-sm font-medium text-gray-700">제목</label>
+                <input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value.slice(0, 100))}
+                  maxLength={100}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981]"
+                  placeholder="문의 제목을 입력하세요 (최대 100자)"
+                />
+              </div>
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700">내용</label>
                 <textarea
                   value={message}
                   onChange={(e) => {
@@ -253,194 +265,187 @@ export default function InquiryPage() {
                     const clip = e.clipboardData.getData('text');
                     if (clip && clip.startsWith('data:')) e.preventDefault();
                   }}
-                  className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base lg:text-lg text-slate-900 outline-none transition focus:border-slate-500"
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981]"
                   placeholder="문의할 내용을 자세히 작성해주세요 (최대 1000자)"
                 />
-                <div className="mt-2 text-right text-xs md:text-sm text-slate-500">{charCount}/1000</div>
+                <div className="mt-2 text-right text-xs text-gray-400">{charCount}/1000</div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-                <label onPaste={handlePasteOnAttachments} className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">
+                <label onPaste={handlePasteOnAttachments} className="flex cursor-pointer items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-[#10b981] hover:bg-gray-50">
                   파일 첨부
                   <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
                 </label>
                 <button
                   type="submit"
                   disabled={loadingState}
-                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                  className="rounded-xl bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   문의 등록
                 </button>
               </div>
 
-            {attachments.length > 0 ? (
-              <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm md:text-base text-slate-700">
-                <p className="font-semibold text-slate-900">첨부 파일</p>
-                <ul className="space-y-2">
-                  {attachments.map((file) => (
-                    <li key={file.name} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-3 py-2">
-                      <span>{file.name}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteAttachment(file.name)}
-                        className="text-xs md:text-sm font-semibold text-slate-600 hover:text-slate-900"
-                      >
-                        삭제
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-          </form>
-        </div>
+              {attachments.length > 0 ? (
+                <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
+                  <p className="font-semibold text-gray-900">첨부 파일</p>
+                  <ul className="space-y-2">
+                    {attachments.map((file) => (
+                      <li key={file.name} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2">
+                        <span>{file.name}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteAttachment(file.name)}
+                          className="text-xs font-semibold text-gray-500 hover:text-gray-900"
+                        >
+                          삭제
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </form>
+          </div>
+        </section>
 
-        <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-sm shadow-slate-200/60">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-xl md:text-2xl font-semibold text-slate-900">{isAdmin ? '전체 문의 목록' : '내 문의 내역'}</h2>
-              <p className="mt-1 text-sm md:text-base text-slate-600">{isAdmin ? '모든 사용자가 보낸 문의를 확인하고 답변할 수 있습니다.' : '회원님이 접수한 문의와 관리자 답변을 확인하세요.'}</p>
-            </div>
-            {loadingState ? <span className="text-sm text-slate-500">로딩 중...</span> : null}
+        <section className="mb-8">
+          <div className="mb-2 flex items-baseline gap-3">
+            <h2 className="text-lg font-bold text-[#111827]">{isAdmin ? '전체 문의 목록' : '내 문의 내역'}</h2>
+            <span className="text-xs text-gray-400">
+              {loadingState ? '로딩 중...' : isAdmin ? '문의를 확인하고 답변할 수 있습니다' : '접수한 문의와 관리자 답변을 확인하세요'}
+            </span>
           </div>
 
-            {fetchError ? (
-            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm md:text-base text-red-700">{fetchError}</div>
-          ) : null}
-          {notification ? (
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm md:text-base text-emerald-700">{notification}</div>
-          ) : null}
-
-          <div className="mt-6 space-y-4">
-            {inquiries.length === 0 ? (
-              <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">
-                {isAdmin ? '등록된 문의가 없습니다.' : '아직 문의가 없습니다. 새 문의를 남겨보세요.'}
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm md:text-base text-slate-500">
-                    총 {inquiries.length}개 · {safeCurrentPage}/{totalPages} 페이지
-                  </div>
-                  <label className="flex items-center gap-2 text-sm md:text-base text-slate-600">
-                    <span>페이지당</span>
-                    <select
-                      value={pageSize}
-                      onChange={(e) => setPageSize(Number(e.target.value))}
-                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm md:text-base text-slate-900 outline-none"
-                    >
-                      <option value={5}>5개</option>
-                      <option value={10}>10개</option>
-                      <option value={20}>20개</option>
-                    </select>
-                  </label>
+          {inquiries.length === 0 ? (
+            <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
+              {isAdmin ? '등록된 문의가 없습니다.' : '아직 문의가 없습니다. 새 문의를 남겨보세요.'}
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-gray-500">
+                  총 {inquiries.length}개 · {safeCurrentPage}/{totalPages} 페이지
                 </div>
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <span>페이지당</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => setPageSize(Number(e.target.value))}
+                    className="rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 outline-none focus:border-[#10b981]"
+                  >
+                    <option value={5}>5개</option>
+                    <option value={10}>10개</option>
+                    <option value={20}>20개</option>
+                  </select>
+                </label>
+              </div>
 
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white divide-y divide-gray-100">
                 {pagedInquiries.map((item) => (
-                <article key={item.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                  <div className="relative">
-                    <div className="absolute right-4 top-4 flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs md:text-sm font-semibold text-slate-700">{item.authorRole === 'admin' ? '관리자' : '사용자'}</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs md:text-sm font-semibold text-slate-700">{item.status === 'answered' ? '답변 완료' : '처리 중'}</span>
-                    </div>
-                    <div>
-                      <div className="text-sm md:text-base text-slate-500">{formatDate(item.createdAt)}</div>
-                      <h3 className="mt-2 text-lg md:text-xl font-semibold text-slate-900">{item.subject}</h3>
-                      <div className="mt-2 text-sm md:text-base lg:text-lg text-slate-600 whitespace-pre-wrap">{item.message}</div>
-                    </div>
-                  </div>
-
-                  {item.attachments && item.attachments.length > 0 ? (
-                    <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-4">
-                      <h4 className="text-sm md:text-base font-semibold text-slate-800">첨부 파일</h4>
-                      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                        {item.attachments.map((file) => (
-                          <div key={file.name} className="rounded-2xl border border-slate-200 p-3 text-sm md:text-base text-slate-700">
-                            <div className="font-semibold">{file.name}</div>
-                            <div className="mt-1 text-xs text-slate-500">{file.mime}</div>
-                          </div>
-                        ))}
+                  <article key={item.id} className="p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-xs text-gray-400">{formatDate(item.createdAt)}</div>
+                        <h3 className="mt-1 wrap-break-word text-base font-semibold text-gray-900">{item.subject}</h3>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <span className="inline-flex whitespace-nowrap rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700">{item.authorRole === 'admin' ? '관리자' : '사용자'}</span>
+                        <span className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${item.status === 'answered' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'}`}>{item.status === 'answered' ? '답변 완료' : '처리 중'}</span>
                       </div>
                     </div>
-                  ) : null}
+                    <div className="mt-2 whitespace-pre-wrap text-sm text-gray-600">{item.message}</div>
+
+                    {item.attachments && item.attachments.length > 0 ? (
+                      <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
+                        <h4 className="text-sm font-semibold text-gray-800">첨부 파일</h4>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          {item.attachments.map((file) => (
+                            <div key={file.name} className="rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-700">
+                              <div className="font-semibold">{file.name}</div>
+                              <div className="mt-1 text-xs text-gray-400">{file.mime}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
 
                     {item.reply ? (
-                    <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm md:text-base text-slate-800">
-                      <div className="font-semibold text-emerald-700">관리자 답변</div>
-                      <p className="mt-2 whitespace-pre-wrap">{item.reply}</p>
-                      <div className="mt-3 text-xs text-slate-500">{item.repliedBy} · {item.repliedAt ? formatDate(item.repliedAt) : ''}</div>
-                    </div>
-                  ) : null}
+                      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-gray-800">
+                        <div className="font-semibold text-emerald-700">관리자 답변</div>
+                        <p className="mt-2 whitespace-pre-wrap">{item.reply}</p>
+                        <div className="mt-3 text-xs text-gray-400">{item.repliedBy} · {item.repliedAt ? formatDate(item.repliedAt) : ''}</div>
+                      </div>
+                    ) : null}
 
-                  {isAdmin ? (
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteInquiry(item.id)}
-                              className="rounded-2xl border border-red-300 bg-red-50 px-4 py-2 text-sm md:text-base font-semibold text-red-700 transition hover:bg-red-100"
-                            >
-                              삭제
-                            </button>
-                            <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                              <input
-                                type="text"
-                                value={activeReplyId === item.id ? replyText : ''}
-                                onChange={(e) => {
-                                  setActiveReplyId(item.id);
-                                  setReplyText(e.target.value);
-                                }}
-                                placeholder="관리자 답변을 입력하세요"
-                                className="min-w-0 flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm md:text-base text-slate-900 outline-none transition focus:border-slate-500"
-                              />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setActiveReplyId(item.id);
-                                  handleReply(item.id);
-                                }}
-                                className="rounded-2xl bg-slate-900 px-5 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700"
-                              >
-                                답변 저장
-                              </button>
-                            </div>
-                          </div>
-                  ) : null}
-                </article>
+                    {isAdmin ? (
+                      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteInquiry(item.id)}
+                          className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-red-600 transition hover:border-red-400"
+                        >
+                          삭제
+                        </button>
+                        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                          <input
+                            type="text"
+                            value={activeReplyId === item.id ? replyText : ''}
+                            onChange={(e) => {
+                              setActiveReplyId(item.id);
+                              setReplyText(e.target.value);
+                            }}
+                            placeholder="관리자 답변을 입력하세요"
+                            className="min-w-0 flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm text-gray-900 outline-none transition focus:border-[#10b981]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setActiveReplyId(item.id);
+                              handleReply(item.id);
+                            }}
+                            className="rounded-xl bg-[#111827] px-4 py-2 text-sm font-semibold text-white transition hover:bg-black"
+                          >
+                            답변 저장
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </article>
                 ))}
+              </div>
 
-                <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeCurrentPage === 1}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  이전
+                </button>
+                {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
                   <button
+                    key={page}
                     type="button"
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => setCurrentPage(page)}
+                    className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${page === safeCurrentPage ? 'bg-[#111827] text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-100'}`}
                   >
-                    이전
+                    {page}
                   </button>
-                  {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
-                    <button
-                      key={page}
-                      type="button"
-                      onClick={() => setCurrentPage(page)}
-                      className={`rounded-full px-3 py-2 text-sm font-semibold transition ${page === safeCurrentPage ? 'bg-slate-900 text-white' : 'border border-slate-300 text-slate-700 hover:bg-slate-100'}`}
-                    >
-                      {page}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="rounded-full border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    다음
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                  disabled={safeCurrentPage === totalPages}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  다음
+                </button>
+              </div>
+            </>
+          )}
+        </section>
       </div>
-    </main>
+    </div>
   );
 }

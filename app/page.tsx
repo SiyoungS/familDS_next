@@ -129,16 +129,14 @@ export default function Home() {
     <div className="relative w-full h-screen bg-[#ffffff] overflow-hidden font-sans select-none flex">
       <FloatingAccountControls
         isFullscreen={isMenuOpen}
-        isAdmin={isAdmin}
-        isHistoryOpen={isHistoryOpen}
-        onHistory={() => setIsHistoryOpen((v) => !v)}
-        onAdmin={() => router.push('/admin')}
-        onInquiry={() => router.push('/inquiry')}
-        onMyPage={() => router.push('/mypage')}
-        onLogout={async () => {
-          await logout();
-          router.push('/auth/login');
-        }}
+        collapseBelow={768}
+        history={{ isOpen: isHistoryOpen, onToggle: () => setIsHistoryOpen((v) => !v) }}
+        items={[
+          { key: 'inquiry', label: '문의하기', onClick: () => router.push('/inquiry') },
+          { key: 'mypage', label: '마이페이지', onClick: () => router.push('/mypage') },
+          ...(isAdmin ? [{ key: 'admin', label: '관리자', onClick: () => router.push('/admin') }] : []),
+          { key: 'logout', label: '로그아웃', emphasized: true, onClick: async () => { await logout(); router.push('/auth/login'); } },
+        ]}
       />
       <RelationAnalysisPage isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
       children={

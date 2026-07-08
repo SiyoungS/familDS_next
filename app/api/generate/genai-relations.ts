@@ -33,7 +33,7 @@ const relationsSchema = {
   required: ["familyRelations"],
 };
 
-type GeminiModelName = "gemini-3.5-flash" | "gemini-3.1-flash-lite";
+type GeminiModelName = "gemini-3.5-flash" | "gemini-3.1-flash-lite"|"gemini-2.5-flash";
 
 export interface FamilyRelation {
   unit_id: string;
@@ -47,7 +47,8 @@ export interface FamilyRelation {
 
 export async function CallGeminiRelations(
   params: { counselText: string; structureSummary: string; thisYear: number },
-  modelName: GeminiModelName = "gemini-3.1-flash-lite"
+  // modelName: GeminiModelName = "gemini-3.1-flash-lite"
+  modelName: GeminiModelName = "gemini-2.5-flash"
 ): Promise<FamilyRelation[]> {
   const { counselText, structureSummary, thisYear } = params;
   const response = await genai.models.generateContent({

@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '../providers/AuthProvider';
+import FloatingAccountControls from '@/components/FloatingAccountControls';
 
 type AdminUser = {
   email: string;
@@ -95,19 +97,25 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-[#f9fafb] px-4 py-8 font-sans">
+      <FloatingAccountControls
+        position="fixed"
+        collapseBelow={1024}
+        icons={[
+          { key: 'refresh', label: '새로고침', icon: <RefreshCw className="h-5 w-5" />, onClick: load },
+        ]}
+        items={[
+          { key: 'home', label: '홈', onClick: () => router.push('/') },
+          { key: 'inquiry', label: '문의하기', onClick: () => router.push('/inquiry') },
+          { key: 'mypage', label: '마이페이지', onClick: () => router.push('/mypage') },
+          { key: 'logout', label: '로그아웃', emphasized: true, onClick: async () => { await logout(); router.push('/auth/login'); } },
+        ]}
+      />
       <div className="mx-auto w-full max-w-5xl">
-        <header className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-[#111827]">사용자 관리</h1>
-            <p className="mt-1 text-sm md:text-base text-gray-500">
-              관리자 {admins.length}명 · 일반 사용자 {normalUsers.length}명 · 승인 대기 {pendingCount}명
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={load} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm md:text-base font-semibold text-gray-700 hover:border-[#10b981]">새로고침</button>
-            <button onClick={() => router.push('/')} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm md:text-base font-semibold text-gray-700 hover:border-[#10b981]">홈</button>
-            <button onClick={async () => { await logout(); router.push('/auth/login'); }} className="rounded-xl bg-[#111827] px-4 py-2 text-sm md:text-base font-semibold text-white hover:bg-black">로그아웃</button>
-          </div>
+        <header className="mb-6 pr-14 lg:pr-40">
+          <h1 className="text-2xl font-bold text-[#111827]">사용자 관리</h1>
+          <p className="mt-1 text-sm md:text-base text-gray-500">
+            관리자 {admins.length}명 · 일반 사용자 {normalUsers.length}명 · 승인 대기 {pendingCount}명
+          </p>
         </header>
 
         {error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm md:text-base text-red-600">{error}</p> : null}
