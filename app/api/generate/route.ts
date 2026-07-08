@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getSession } from '@/lib/auth/session';
 import { getSystemPrompt_bowen } from '@/lib/prompt-loader';
 import { processGenogramData } from '@/lib/genograms/bowen/process';
 import { CallOpenAI } from './openai-route';
@@ -7,6 +8,8 @@ import { ApiMode } from '@/types/api-loaders.type';
 import { CallGemini } from './genai-route';
 import { CallGeminiRelations, type FamilyRelation } from './genai-relations';
 
+// getSession은 next/headers의 cookies를 사용하므로 Node.js 런타임 필요
+export const runtime = 'nodejs';
 
 const getThisYear = (timezoneOffset:number) => {
   const now = new Date();
@@ -40,6 +43,11 @@ function applyRelations(data: any, relations: FamilyRelation[]) {
 }
 
 export async function POST(req: Request) {
+  const session = await getSession();
+  if (!session) {
+    return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+  }
+
   const { counselText, counselTarget } = await req.json();
   
   const selectAPI:ApiMode = "gemini"; 

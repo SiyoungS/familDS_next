@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 
+import { getSession } from '@/lib/auth/session';
 import { extractHwpText } from '@/lib/hwp/extract-text';
 
 // HWP 파싱은 Node 내장 zlib/Buffer를 사용하므로 Node.js 런타임 필요
@@ -7,6 +8,11 @@ export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
   try {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    }
+
     const formData = await req.formData();
     const file = formData.get('file');
 
