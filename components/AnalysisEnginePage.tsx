@@ -91,11 +91,11 @@ export default function AnalysisEnginePage({
               
               onChange={(e) => setCounselTarget(e.target.value)}
               placeholder={`띄어쓰기 없이 대상자/내담자의 이름을 입력해주세요. 예시: 홍길동`}
-              className="w-full flex flex-row p-5 rounded-2xl border border-gray-100 bg-[#f9fafc] text-gray-700 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#10b981]/20 focus:border-[#10b981] transition-all resize-none shadow-inner leading-relaxed" 
+              className="w-full flex flex-row p-5 rounded-2xl border border-gray-100 bg-[#f9fafc] text-gray-700 text-sm md:text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#10b981]/20 focus:border-[#10b981] transition-all resize-none shadow-inner leading-relaxed" 
             />
               {/* 텍스트 영역 */}
               <textarea
-                className="w-full flex-1 p-5 rounded-2xl border border-gray-100 bg-[#f9fafc] text-gray-700 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#10b981]/20 focus:border-[#10b981] transition-all resize-none shadow-inner leading-relaxed"
+                className="w-full flex-1 p-5 rounded-2xl border border-gray-100 bg-[#f9fafc] text-gray-700 text-sm md:text-base placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#10b981]/20 focus:border-[#10b981] transition-all resize-none shadow-inner leading-relaxed"
                 placeholder="사회복지사님의 상담 기록을 입력하거나 붙여넣으세요. &#10;&#10;예시: '대상자는 현재 72세 여성으로, 근처에 살고 있는 딸 영희가 매주 방문해서 돌보고 있습니다. 하지만 장남인 철수와는 수년간 연락이 닿지 않아 단절 상태입니다...'"
                 value={counselText}
                 onChange={(e) => setCounselText(e.target.value)}

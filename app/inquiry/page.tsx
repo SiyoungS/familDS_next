@@ -42,6 +42,7 @@ export default function InquiryPage() {
   const [loadingState, setLoadingState] = useState(false);
   const [notification, setNotification] = useState('');
   const [fetchError, setFetchError] = useState('');
+  const [charCount, setCharCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
 
@@ -65,6 +66,11 @@ export default function InquiryPage() {
       loadInquiries();
     }
   }, [loading, isAuthenticated]);
+
+  // keep charCount synced if message changes from elsewhere
+  useEffect(() => {
+    setCharCount(message.length);
+  }, [message]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -91,6 +97,10 @@ export default function InquiryPage() {
       setNotification('제목과 내용을 모두 입력해주세요.');
       return;
     }
+    if (message.length > 1000) {
+      setNotification('문의 내용은 최대 1000자까지 입력할 수 있습니다.');
+      return;
+    }
     setLoadingState(true);
     setNotification('');
     try {
@@ -105,6 +115,7 @@ export default function InquiryPage() {
       }
       setSubject('');
       setMessage('');
+      setCharCount(0);
       setAttachments([]);
       setNotification('문의가 정상적으로 접수되었습니다.');
       await loadInquiries();
@@ -128,6 +139,12 @@ export default function InquiryPage() {
       setLoadingState(false);
       event.target.value = '';
     }
+  }
+
+  // prevent user from injecting attachments via manual input - only allow file picker flow
+  function handlePasteOnAttachments(e: React.ClipboardEvent) {
+    // noop: attachments are only added via file input; ignore pasted content
+    e.preventDefault();
   }
 
   async function handleDeleteAttachment(name: string) {
@@ -194,12 +211,12 @@ export default function InquiryPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-semibold text-slate-900">{standardLabel}</h1>
-              <p className="mt-1 text-sm text-slate-600">문의는 관리자에게만 공개되며, 다른 사용자에게는 비공개로 처리됩니다.</p>
+              <p className="mt-1 text-sm md:text-base text-slate-600">문의는 관리자에게만 공개되며, 다른 사용자에게는 비공개로 처리됩니다.</p>
             </div>
             <button
               type="button"
               onClick={() => router.push('/')}
-              className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-700"
+              className="inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700"
             >
               돌아가기
             </button>
@@ -207,46 +224,57 @@ export default function InquiryPage() {
         </div>
 
         <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-sm shadow-slate-200/60">
-          <div className="mb-4 text-sm text-slate-600">
+          <div className="mb-4 text-sm md:text-base text-slate-600">
             {isAdmin ? '관리자도 이 폼으로 새 문의를 등록할 수 있습니다.' : '문의 제목과 내용을 작성한 뒤 등록하면 관리자에게 전달됩니다.'}
           </div>
           <form className="space-y-5" onSubmit={handleSubmit}>
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">제목</label>
+              <label className="mb-2 block text-sm md:text-base font-medium text-slate-700">제목</label>
               <input
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-900 outline-none transition focus:border-slate-500"
                 placeholder="문의 제목을 입력하세요"
               />
             </div>
-            <div>
-              <label className="mb-2 block text-sm font-medium text-slate-700">내용</label>
-              <textarea
-                value={message}
-                onChange={(e) => setMessage(e.target.value)}
-                rows={6}
-                className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                placeholder="문의할 내용을 자세히 작성해주세요"
-              />
-            </div>
+              <div>
+                <label className="mb-2 block text-sm md:text-base font-medium text-slate-700">내용</label>
+                <textarea
+                  value={message}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setMessage(v.slice(0, 1000));
+                    setCharCount(v.slice(0, 1000).length);
+                  }}
+                  rows={6}
+                  maxLength={1000}
+                  onPaste={(e) => {
+                    // prevent pasting very large data URLs into textarea
+                    const clip = e.clipboardData.getData('text');
+                    if (clip && clip.startsWith('data:')) e.preventDefault();
+                  }}
+                  className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base lg:text-lg text-slate-900 outline-none transition focus:border-slate-500"
+                  placeholder="문의할 내용을 자세히 작성해주세요 (최대 1000자)"
+                />
+                <div className="mt-2 text-right text-xs md:text-sm text-slate-500">{charCount}/1000</div>
+              </div>
 
-            <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-              <label className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">
-                파일 첨부
-                <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
-              </label>
-              <button
-                type="submit"
-                disabled={loadingState}
-                className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
-              >
-                문의 등록
-              </button>
-            </div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <label onPaste={handlePasteOnAttachments} className="flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-700 transition hover:border-slate-400 hover:bg-slate-100">
+                  파일 첨부
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} />
+                </label>
+                <button
+                  type="submit"
+                  disabled={loadingState}
+                  className="rounded-2xl bg-slate-900 px-5 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-400"
+                >
+                  문의 등록
+                </button>
+              </div>
 
             {attachments.length > 0 ? (
-              <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+              <div className="space-y-2 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm md:text-base text-slate-700">
                 <p className="font-semibold text-slate-900">첨부 파일</p>
                 <ul className="space-y-2">
                   {attachments.map((file) => (
@@ -255,7 +283,7 @@ export default function InquiryPage() {
                       <button
                         type="button"
                         onClick={() => handleDeleteAttachment(file.name)}
-                        className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                        className="text-xs md:text-sm font-semibold text-slate-600 hover:text-slate-900"
                       >
                         삭제
                       </button>
@@ -270,17 +298,17 @@ export default function InquiryPage() {
         <div className="rounded-3xl border border-slate-200/80 bg-white/95 p-6 shadow-sm shadow-slate-200/60">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-slate-900">{isAdmin ? '전체 문의 목록' : '내 문의 내역'}</h2>
-              <p className="mt-1 text-sm text-slate-600">{isAdmin ? '모든 사용자가 보낸 문의를 확인하고 답변할 수 있습니다.' : '회원님이 접수한 문의와 관리자 답변을 확인하세요.'}</p>
+              <h2 className="text-xl md:text-2xl font-semibold text-slate-900">{isAdmin ? '전체 문의 목록' : '내 문의 내역'}</h2>
+              <p className="mt-1 text-sm md:text-base text-slate-600">{isAdmin ? '모든 사용자가 보낸 문의를 확인하고 답변할 수 있습니다.' : '회원님이 접수한 문의와 관리자 답변을 확인하세요.'}</p>
             </div>
             {loadingState ? <span className="text-sm text-slate-500">로딩 중...</span> : null}
           </div>
 
-          {fetchError ? (
-            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{fetchError}</div>
+            {fetchError ? (
+            <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm md:text-base text-red-700">{fetchError}</div>
           ) : null}
           {notification ? (
-            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notification}</div>
+            <div className="mt-5 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm md:text-base text-emerald-700">{notification}</div>
           ) : null}
 
           <div className="mt-6 space-y-4">
@@ -291,15 +319,15 @@ export default function InquiryPage() {
             ) : (
               <>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm text-slate-500">
+                  <div className="text-sm md:text-base text-slate-500">
                     총 {inquiries.length}개 · {safeCurrentPage}/{totalPages} 페이지
                   </div>
-                  <label className="flex items-center gap-2 text-sm text-slate-600">
+                  <label className="flex items-center gap-2 text-sm md:text-base text-slate-600">
                     <span>페이지당</span>
                     <select
                       value={pageSize}
                       onChange={(e) => setPageSize(Number(e.target.value))}
-                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm md:text-base text-slate-900 outline-none"
                     >
                       <option value={5}>5개</option>
                       <option value={10}>10개</option>
@@ -310,24 +338,24 @@ export default function InquiryPage() {
 
                 {pagedInquiries.map((item) => (
                 <article key={item.id} className="rounded-3xl border border-slate-200 bg-slate-50 p-5 shadow-sm">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <div className="text-sm text-slate-500">{formatDate(item.createdAt)}</div>
-                      <h3 className="mt-2 text-lg font-semibold text-slate-900">{item.subject}</h3>
-                      <div className="mt-2 text-sm text-slate-600 whitespace-pre-wrap">{item.message}</div>
+                  <div className="relative">
+                    <div className="absolute right-4 top-4 flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs md:text-sm font-semibold text-slate-700">{item.authorRole === 'admin' ? '관리자' : '사용자'}</span>
+                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs md:text-sm font-semibold text-slate-700">{item.status === 'answered' ? '답변 완료' : '처리 중'}</span>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{item.authorRole === 'admin' ? '관리자' : '사용자'}</span>
-                      <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700">{item.status === 'answered' ? '답변 완료' : '처리 중'}</span>
+                    <div>
+                      <div className="text-sm md:text-base text-slate-500">{formatDate(item.createdAt)}</div>
+                      <h3 className="mt-2 text-lg md:text-xl font-semibold text-slate-900">{item.subject}</h3>
+                      <div className="mt-2 text-sm md:text-base lg:text-lg text-slate-600 whitespace-pre-wrap">{item.message}</div>
                     </div>
                   </div>
 
                   {item.attachments && item.attachments.length > 0 ? (
                     <div className="mt-4 rounded-3xl border border-slate-200 bg-white p-4">
-                      <h4 className="text-sm font-semibold text-slate-800">첨부 파일</h4>
+                      <h4 className="text-sm md:text-base font-semibold text-slate-800">첨부 파일</h4>
                       <div className="mt-3 grid gap-3 sm:grid-cols-2">
                         {item.attachments.map((file) => (
-                          <div key={file.name} className="rounded-2xl border border-slate-200 p-3 text-sm text-slate-700">
+                          <div key={file.name} className="rounded-2xl border border-slate-200 p-3 text-sm md:text-base text-slate-700">
                             <div className="font-semibold">{file.name}</div>
                             <div className="mt-1 text-xs text-slate-500">{file.mime}</div>
                           </div>
@@ -336,8 +364,8 @@ export default function InquiryPage() {
                     </div>
                   ) : null}
 
-                  {item.reply ? (
-                    <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-slate-800">
+                    {item.reply ? (
+                    <div className="mt-4 rounded-3xl border border-emerald-200 bg-emerald-50 p-4 text-sm md:text-base text-slate-800">
                       <div className="font-semibold text-emerald-700">관리자 답변</div>
                       <p className="mt-2 whitespace-pre-wrap">{item.reply}</p>
                       <div className="mt-3 text-xs text-slate-500">{item.repliedBy} · {item.repliedAt ? formatDate(item.repliedAt) : ''}</div>
@@ -345,37 +373,37 @@ export default function InquiryPage() {
                   ) : null}
 
                   {isAdmin ? (
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteInquiry(item.id)}
-                        className="rounded-2xl border border-red-300 bg-red-50 px-4 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                      >
-                        삭제
-                      </button>
-                      <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
-                        <input
-                          type="text"
-                          value={activeReplyId === item.id ? replyText : ''}
-                          onChange={(e) => {
-                            setActiveReplyId(item.id);
-                            setReplyText(e.target.value);
-                          }}
-                          placeholder="관리자 답변을 입력하세요"
-                          className="min-w-0 flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setActiveReplyId(item.id);
-                            handleReply(item.id);
-                          }}
-                          className="rounded-2xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-700"
-                        >
-                          답변 저장
-                        </button>
-                      </div>
-                    </div>
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteInquiry(item.id)}
+                              className="rounded-2xl border border-red-300 bg-red-50 px-4 py-2 text-sm md:text-base font-semibold text-red-700 transition hover:bg-red-100"
+                            >
+                              삭제
+                            </button>
+                            <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+                              <input
+                                type="text"
+                                value={activeReplyId === item.id ? replyText : ''}
+                                onChange={(e) => {
+                                  setActiveReplyId(item.id);
+                                  setReplyText(e.target.value);
+                                }}
+                                placeholder="관리자 답변을 입력하세요"
+                                className="min-w-0 flex-1 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm md:text-base text-slate-900 outline-none transition focus:border-slate-500"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveReplyId(item.id);
+                                  handleReply(item.id);
+                                }}
+                                className="rounded-2xl bg-slate-900 px-5 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700"
+                              >
+                                답변 저장
+                              </button>
+                            </div>
+                          </div>
                   ) : null}
                 </article>
                 ))}

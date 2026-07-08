@@ -49,10 +49,10 @@ export default function WithdrawPage() {
     }
   };
 
-  if (loading || !isAuthenticated) {
+    if (loading || !isAuthenticated) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-[#f8fafc] px-4 py-10">
-        <p className="text-sm text-slate-600">인증 상태를 확인 중입니다...</p>
+        <p className="text-sm md:text-base text-slate-600">인증 상태를 확인 중입니다...</p>
       </main>
     );
   }
@@ -61,14 +61,14 @@ export default function WithdrawPage() {
     <main className="min-h-screen bg-[#f8fafc] px-4 py-10 text-gray-900">
       <div className="mx-auto max-w-2xl rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.08)]">
         <div className="mb-6">
-          <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#ef4444]">회원탈퇴</p>
+          <p className="text-sm md:text-base font-semibold uppercase tracking-[0.3em] text-[#ef4444]">회원탈퇴</p>
           <h1 className="mt-4 text-3xl font-bold text-[#111827]">정말 탈퇴하시겠어요?</h1>
-          <p className="mt-3 text-sm leading-6 text-slate-600">
+          <p className="mt-3 text-sm md:text-base leading-6 text-slate-600">
             탈퇴하면 계정 상태가 비활성화되고, 이후에는 서비스 이용이 제한됩니다. 현재 로그인된 계정은 <span className="font-semibold text-slate-900">{user?.email}</span> 입니다.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm text-slate-700">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-sm md:text-base text-slate-700">
           <p className="font-semibold text-slate-900">탈퇴 시 처리되는 내용</p>
           <ul className="mt-3 list-disc space-y-2 pl-5">
             <li>계정이 탈퇴 처리되어 더 이상 로그인할 수 없습니다.</li>
@@ -77,7 +77,7 @@ export default function WithdrawPage() {
           </ul>
         </div>
 
-        <label className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 px-4 py-4 text-sm text-slate-700">
+        <label className="mt-5 flex items-start gap-3 rounded-2xl border border-slate-200 px-4 py-4 text-sm md:text-base text-slate-700">
           <input
             type="checkbox"
             checked={agreed}
@@ -88,18 +88,18 @@ export default function WithdrawPage() {
         </label>
 
         <div className="mt-5">
-          <label className="mb-2 block text-sm font-medium text-slate-700">확인 문구 입력</label>
+          <label className="mb-2 block text-sm md:text-base font-medium text-slate-700">확인 문구 입력</label>
           <input
             value={confirmText}
             onChange={(e) => setConfirmText(e.target.value)}
             placeholder="탈퇴"
-            className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-slate-500"
+            className="w-full rounded-2xl border border-slate-300 bg-slate-50 px-4 py-3 text-sm md:text-base text-slate-900 outline-none transition focus:border-slate-500"
           />
           <p className="mt-2 text-xs text-slate-500">확인을 위해 “탈퇴”를 정확히 입력해 주세요.</p>
         </div>
 
         {errorMessage ? (
-          <p className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{errorMessage}</p>
+          <p className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm md:text-base text-red-700">{errorMessage}</p>
         ) : null}
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -107,14 +107,14 @@ export default function WithdrawPage() {
             type="button"
             onClick={handleWithdraw}
             disabled={busy}
-            className="flex-1 rounded-2xl bg-[#ef4444] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#dc2626] disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex-1 rounded-2xl bg-[#ef4444] px-5 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-[#dc2626] disabled:cursor-not-allowed disabled:opacity-70"
           >
             {busy ? '처리 중...' : '회원탈퇴 진행'}
           </button>
           <button
             type="button"
             onClick={() => router.push('/')}
-            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+            className="rounded-2xl border border-slate-300 bg-white px-5 py-3 text-sm md:text-base font-semibold text-slate-700 transition hover:border-slate-400"
           >
             취소
           </button>

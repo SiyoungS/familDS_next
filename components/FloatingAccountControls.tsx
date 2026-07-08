@@ -112,7 +112,7 @@ export default function FloatingAccountControls({
             collapse();
             onInquiry();
           }}
-          className="rounded-full px-5 py-2 text-sm font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
+          className="rounded-full px-5 py-2 text-sm md:text-base font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
         >
           문의하기
         </button>
@@ -122,7 +122,7 @@ export default function FloatingAccountControls({
             collapse();
             onMyPage();
           }}
-          className="rounded-full px-5 py-2 text-sm font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
+          className="rounded-full px-5 py-2 text-sm md:text-base font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
         >
           마이페이지
         </button>
@@ -133,7 +133,7 @@ export default function FloatingAccountControls({
               collapse();
               onAdmin();
             }}
-            className="rounded-full px-5 py-2 text-sm font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
+            className="rounded-full px-5 py-2 text-sm md:text-base font-semibold text-[#111827]/90 transition hover:bg-white/50 hover:text-[#10b981]"
           >
             관리자
           </button>
@@ -144,7 +144,7 @@ export default function FloatingAccountControls({
             collapse();
             await onLogout();
           }}
-          className="rounded-full bg-white/35 px-5 py-2 text-sm font-semibold text-[#111827]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/60 hover:text-[#10b981]"
+          className="rounded-full bg-white/35 px-5 py-2 text-sm md:text-base font-semibold text-[#111827]/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)] transition hover:bg-white/60 hover:text-[#10b981]"
         >
           로그아웃
         </button>

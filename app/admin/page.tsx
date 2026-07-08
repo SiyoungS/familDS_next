@@ -88,7 +88,7 @@ export default function AdminPage() {
   if (loading || !isAdmin) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f9fafb]">
-        <p className="text-sm text-gray-500">관리자 권한 확인 중...</p>
+        <p className="text-sm md:text-base text-gray-500">관리자 권한 확인 중...</p>
       </div>
     );
   }
@@ -99,18 +99,18 @@ export default function AdminPage() {
         <header className="mb-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-[#111827]">사용자 관리</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm md:text-base text-gray-500">
               관리자 {admins.length}명 · 일반 사용자 {normalUsers.length}명 · 승인 대기 {pendingCount}명
             </p>
           </div>
           <div className="flex gap-2">
-            <button onClick={load} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-[#10b981]">새로고침</button>
-            <button onClick={() => router.push('/')} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:border-[#10b981]">홈</button>
-            <button onClick={async () => { await logout(); router.push('/auth/login'); }} className="rounded-xl bg-[#111827] px-4 py-2 text-sm font-semibold text-white hover:bg-black">로그아웃</button>
+            <button onClick={load} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm md:text-base font-semibold text-gray-700 hover:border-[#10b981]">새로고침</button>
+            <button onClick={() => router.push('/')} className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm md:text-base font-semibold text-gray-700 hover:border-[#10b981]">홈</button>
+            <button onClick={async () => { await logout(); router.push('/auth/login'); }} className="rounded-xl bg-[#111827] px-4 py-2 text-sm md:text-base font-semibold text-white hover:bg-black">로그아웃</button>
           </div>
         </header>
 
-        {error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p> : null}
+        {error ? <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm md:text-base text-red-600">{error}</p> : null}
 
         {/* 관리자 */}
         <Section title="관리자" subtitle="DB에서 role=admin 으로 지정된 계정">
@@ -120,7 +120,7 @@ export default function AdminPage() {
         {/* 일반 사용자 */}
         <Section title="일반 사용자" subtitle="승인해야 서비스 이용 가능">
           {fetching ? (
-            <p className="px-4 py-6 text-sm text-gray-400">불러오는 중...</p>
+            <p className="px-4 py-6 text-sm md:text-base text-gray-400">불러오는 중...</p>
           ) : (
             <UserTable users={normalUsers} onChange={changeStatus} selfEmail={user?.email} />
           )}
@@ -160,10 +160,10 @@ function UserTable({
   isAdminTable?: boolean;
 }) {
   if (users.length === 0) {
-    return <p className="px-4 py-6 text-sm text-gray-400">해당 사용자가 없습니다.</p>;
+    return <p className="px-4 py-6 text-sm md:text-base text-gray-400">해당 사용자가 없습니다.</p>;
   }
   return (
-    <table className="w-full text-left text-sm">
+    <table className="w-full text-left text-sm md:text-base">
       <thead className="bg-gray-50 text-xs uppercase text-gray-500">
         <tr>
           <th className="px-4 py-3">사용자</th>

@@ -72,16 +72,16 @@ export default function HistoryPanel({
         </div>
 
         {error ? (
-          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+          <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm md:text-base text-red-600">{error}</p>
         ) : null}
 
         {loading && items.length === 0 ? (
-          <p className="text-sm text-gray-400">불러오는 중...</p>
+          <p className="text-sm md:text-base text-gray-400">불러오는 중...</p>
         ) : items.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-400 py-16">
             <span className="text-3xl mb-2">🗂️</span>
-            <p className="text-sm">아직 기록이 없습니다.</p>
-            <p className="text-xs mt-1">분석을 실행하면 이곳에 기록됩니다.</p>
+            <p className="text-sm md:text-base">아직 기록이 없습니다.</p>
+            <p className="text-xs md:text-sm mt-1">분석을 실행하면 이곳에 기록됩니다.</p>
           </div>
         ) : (
           <ul className="space-y-3">
@@ -96,7 +96,7 @@ export default function HistoryPanel({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-900 truncate">{item.counselTarget || '(이름 없음)'}</span>
+                          <span className="text-sm md:text-base font-bold text-gray-900 truncate">{item.counselTarget || '(이름 없음)'}</span>
                         {item.saved ? (
                           <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">저장됨</span>
                         ) : null}

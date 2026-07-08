@@ -43,31 +43,31 @@ export default function LoginPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.16),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.14),_transparent_24%)] pointer-events-none" />
         <div className="relative p-8 lg:p-12">
           <div className="mb-8 text-center">
-            <p className="text-sm text-[#10b981] font-semibold uppercase tracking-[0.25em]">로그인</p>
+            <p className="text-sm md:text-base text-[#10b981] font-semibold uppercase tracking-[0.25em]">로그인</p>
             <h1 className="mt-5 text-3xl font-bold text-[#0f172a]">계정으로 접속하기</h1>
-            <p className="mt-3 text-sm text-gray-500 leading-6">
+            <p className="mt-3 text-sm md:text-base text-gray-500 leading-6">
               Google 계정으로 심리 상담 가계도 서비스를 이용하세요.
             </p>
           </div>
 
           {errorMessage ? (
-            <p className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-100">{errorMessage}</p>
+            <p className="mb-4 rounded-2xl bg-red-50 px-4 py-3 text-sm md:text-base text-red-700 border border-red-100">{errorMessage}</p>
           ) : null}
           {notice ? (
-            <p className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm text-amber-800 border border-amber-100">{notice}</p>
+            <p className="mb-4 rounded-2xl bg-amber-50 px-4 py-3 text-sm md:text-base text-amber-800 border border-amber-100">{notice}</p>
           ) : null}
 
           <button
             type="button"
             onClick={handleGoogleLogin}
             disabled={busy || loading}
-            className="flex w-full items-center justify-center gap-3 rounded-3xl border border-gray-300 bg-white px-5 py-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:border-[#10b981] hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex w-full items-center justify-center gap-3 rounded-3xl border border-gray-300 bg-white px-5 py-4 text-sm md:text-base font-semibold text-gray-800 shadow-sm transition hover:border-[#10b981] hover:shadow disabled:cursor-not-allowed disabled:opacity-70"
           >
             <GoogleIcon />
             {busy ? '로그인 중...' : 'Google로 로그인'}
           </button>
 
-          <div className="mt-8 border-t border-gray-200 pt-5 text-sm text-center text-gray-500">
+          <div className="mt-8 border-t border-gray-200 pt-5 text-sm md:text-base text-center text-gray-500">
             아직 계정이 없으신가요?
             <div className="mt-3">
               <button type="button" className="font-semibold text-[#10b981] hover:underline" onClick={() => router.push('/auth/signup')}>회원가입</button>

@@ -46,25 +46,25 @@ export default function SignupPage() {
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.12),_transparent_28%),radial-gradient(circle_at_bottom_right,_rgba(56,189,248,0.08),_transparent_24%)] pointer-events-none" />
         <div className="relative p-8 lg:p-12">
           <div className="mb-6">
-            <span className="inline-flex rounded-full bg-[#d1fae5] px-3 py-1 text-sm font-semibold text-[#065f46]">새 계정 생성</span>
+            <span className="inline-flex rounded-full bg-[#d1fae5] px-3 py-1 text-sm md:text-base font-semibold text-[#065f46]">새 계정 생성</span>
             <h1 className="mt-6 text-2xl font-bold tracking-tight text-[#0f172a]">회원가입</h1>
-            <p className="mt-2 text-sm text-gray-600">Google 계정으로 가입합니다. 가입 후 <b>관리자 승인</b>이 완료되어야 서비스를 이용할 수 있습니다.</p>
+            <p className="mt-2 text-sm md:text-base text-gray-600">Google 계정으로 가입합니다. 가입 후 <b>관리자 승인</b>이 완료되어야 서비스를 이용할 수 있습니다.</p>
           </div>
 
           {done === 'pending' ? (
-            <div className="rounded-2xl bg-amber-50 px-5 py-6 text-sm text-amber-800 border border-amber-100">
+            <div className="rounded-2xl bg-amber-50 px-5 py-6 text-sm md:text-base text-amber-800 border border-amber-100">
               <p className="font-semibold">가입 신청이 접수되었습니다.</p>
               <p className="mt-1">관리자 승인 후 로그인하여 이용할 수 있습니다.</p>
               <button type="button" className="mt-4 font-semibold text-[#10b981] hover:underline" onClick={() => router.push('/auth/login')}>로그인 화면으로</button>
             </div>
           ) : done === 'rejected' ? (
-            <div className="rounded-2xl bg-red-50 px-5 py-6 text-sm text-red-700 border border-red-100">
+            <div className="rounded-2xl bg-red-50 px-5 py-6 text-sm md:text-base text-red-700 border border-red-100">
               접근이 거부된 계정입니다. 관리자에게 문의하세요.
             </div>
           ) : (
             <>
               {/* 수집 정보 안내 */}
-              <div className="rounded-2xl border border-gray-100 bg-[#f8fafc] px-5 py-4 text-sm text-gray-600">
+              <div className="rounded-2xl border border-gray-100 bg-[#f8fafc] px-5 py-4 text-sm md:text-base text-gray-600">
                 <p className="font-semibold text-gray-800">수집하는 정보</p>
                 <ul className="mt-2 list-disc pl-5 space-y-1">
                   <li><b>이메일</b> — 계정 식별 및 로그인</li>
@@ -73,7 +73,7 @@ export default function SignupPage() {
                 <p className="mt-2 text-xs text-gray-500">Google 로그인 시 위 정보를 제공받아 계정 생성에 사용합니다.</p>
               </div>
 
-              <label className="mt-4 flex items-start gap-3 text-sm text-gray-700">
+              <label className="mt-4 flex items-start gap-3 text-sm md:text-base text-gray-700">
                 <input
                   type="checkbox"
                   checked={consent}
@@ -84,19 +84,19 @@ export default function SignupPage() {
               </label>
 
               {errorMessage ? (
-                <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm text-red-700 border border-red-100">{errorMessage}</p>
+                <p className="mt-4 rounded-2xl bg-red-50 px-4 py-3 text-sm md:text-base text-red-700 border border-red-100">{errorMessage}</p>
               ) : null}
 
               <button
                 type="button"
                 onClick={handleGoogleSignup}
                 disabled={busy || !consent}
-                className="mt-5 flex w-full items-center justify-center gap-3 rounded-3xl border border-gray-300 bg-white px-5 py-4 text-sm font-semibold text-gray-800 shadow-sm transition hover:border-[#10b981] hover:shadow disabled:cursor-not-allowed disabled:opacity-60"
+                className="mt-5 flex w-full items-center justify-center gap-3 rounded-3xl border border-gray-300 bg-white px-5 py-4 text-sm md:text-base font-semibold text-gray-800 shadow-sm transition hover:border-[#10b981] hover:shadow disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {busy ? '처리 중...' : 'Google로 가입하기'}
               </button>
 
-              <div className="mt-6 text-sm text-center text-gray-500">
+              <div className="mt-6 text-sm md:text-base text-center text-gray-500">
                 이미 계정이 있으신가요?{' '}
                 <button type="button" className="font-semibold text-[#10b981] hover:underline" onClick={() => router.push('/auth/login')}>로그인</button>
               </div>

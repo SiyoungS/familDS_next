@@ -44,10 +44,24 @@ export default function MyPage() {
     router.push('/admin');
   };
 
+  const handleHomeClick = () => {
+    router.push('/');
+  };
+
+  const handleLogoutClick = async () => {
+    setBusy(true);
+    try {
+      await logout();
+      router.push('/auth/login');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading || !isAuthenticated) {
     return (
       <main className="min-h-screen flex items-center justify-center bg-slate-50 px-4 py-10 text-slate-600">
-        <p>인증 상태를 확인 중입니다...</p>
+        <p className="text-sm md:text-base">인증 상태를 확인 중입니다...</p>
       </main>
     );
   }
@@ -58,29 +72,25 @@ export default function MyPage() {
         <section className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-[0_30px_80px_rgba(15,23,42,0.08)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="text-sm font-semibold uppercase tracking-[0.3em] text-[#10b981]">마이페이지</p>
-              <h1 className="mt-3 text-3xl font-bold text-[#111827]">계정 관리</h1>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+              <p className="text-xs md:text-sm font-semibold uppercase tracking-[0.3em] text-[#10b981]">마이페이지</p>
+              <h1 className="mt-3 text-3xl md:text-4xl font-bold text-[#111827]">계정 관리</h1>
+              <p className="mt-2 max-w-2xl text-sm md:text-base leading-7 text-slate-600">
                 여기는 내 계정과 서비스 이용 상태를 확인하고, 회원관리 기능을 사용할 수 있는 공간입니다.
               </p>
             </div>
             <button
               type="button"
-              onClick={() => {
-                setBusy(true);
-                logout().then(() => router.push('/auth/login')).finally(() => setBusy(false));
-              }}
-              disabled={busy}
-              className="inline-flex items-center justify-center rounded-3xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={handleHomeClick}
+              className="inline-flex items-center justify-center rounded-3xl bg-slate-900 px-5 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-slate-800"
             >
-              로그아웃
+              돌아가기
             </button>
           </div>
 
           <div className="mt-8 grid gap-4 sm:grid-cols-2">
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-              <h2 className="text-base font-semibold text-slate-900">계정 정보</h2>
-              <dl className="mt-4 space-y-3 text-sm text-slate-700">
+              <h2 className="text-base md:text-lg font-semibold text-slate-900">계정 정보</h2>
+              <dl className="mt-4 space-y-3 text-sm md:text-base text-slate-700">
                 <div className="flex items-start justify-between gap-3">
                   <dt className="font-medium text-slate-600">이메일</dt>
                   <dd className="break-words text-slate-900">{user?.email}</dd>
@@ -91,7 +101,7 @@ export default function MyPage() {
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <dt className="font-medium text-slate-600">역할</dt>
-                  <dd className="text-slate-900 capitalize">{user?.role}</dd>
+                  <dd className="text-slate-900">{user?.role === 'admin' ? '관리자' : '사용자'}</dd>
                 </div>
                 <div className="flex items-start justify-between gap-3">
                   <dt className="font-medium text-slate-600">회원 상태</dt>
@@ -101,33 +111,43 @@ export default function MyPage() {
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-6">
-              <h2 className="text-base font-semibold text-slate-900">서비스 관리</h2>
-              <div className="mt-4 space-y-3 text-sm text-slate-700">
-                <p>아래 버튼을 이용해 문의 등록 및 회원 탈퇴를 진행할 수 있습니다.</p>
+              <h2 className="text-base md:text-lg font-semibold text-slate-900">서비스 관리</h2>
+              <div className="mt-4 space-y-3 text-sm md:text-base text-slate-700">
+                <p>아래 버튼을 이용해 문의 등록, 회원 탈퇴, 로그아웃을 진행할 수 있습니다.</p>
                 <div className="grid gap-3">
                   <button
                     type="button"
                     onClick={handleInquiryClick}
-                    className="w-full rounded-3xl bg-[#10b981] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#0f766e]"
+                    className="w-full rounded-3xl bg-[#10b981] px-4 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-[#0f766e]"
                   >
                     문의하기로 이동
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleWithdrawClick}
-                    className="w-full rounded-3xl bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
-                  >
-                    회원탈퇴 진행
                   </button>
                   {user?.role === 'admin' ? (
                     <button
                       type="button"
                       onClick={handleAdminClick}
-                      className="w-full rounded-3xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-400"
+                      className="w-full rounded-3xl border border-slate-300 bg-white px-4 py-3 text-sm md:text-base font-semibold text-slate-900 transition hover:border-slate-400"
                     >
                       관리자 페이지 이동
                     </button>
                   ) : null}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      onClick={handleWithdrawClick}
+                      className="w-full rounded-3xl bg-red-600 px-4 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-red-700"
+                    >
+                      회원탈퇴 진행
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleLogoutClick}
+                      disabled={busy}
+                      className="w-full rounded-3xl bg-slate-600 px-4 py-3 text-sm md:text-base font-semibold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      {busy ? '처리 중...' : '로그아웃'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -116,7 +116,7 @@ export default function Home() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#ffffff]">
-        <p className="text-sm text-gray-600">인증 상태를 확인 중입니다...</p>
+        <p className="text-sm md:text-base text-gray-600">인증 상태를 확인 중입니다...</p>
       </div>
     );
   }
