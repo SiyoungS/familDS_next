@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth/session';
 import { createInquiry, listAllInquiries, listUserInquiries } from '@/lib/db/inquiries';
+import { findUserByEmail } from '@/lib/db/users';
 import type { AppInquiry } from '@/types/inquiry';
 
 export async function GET(request: Request) {
@@ -82,12 +83,16 @@ export async function POST(request: Request) {
     }
   }
 
+  // Ensure we use the latest role from DB (in case admin changed role after session issued)
+  const dbUser = await findUserByEmail(session.email).catch(() => null);
+  const effectiveRole = dbUser?.role || session.role;
+
   const inquiry: Omit<AppInquiry, 'createdAt' | 'status'> = {
     subject,
     message,
     authorEmail: session.email,
     authorName: session.name || session.email,
-    authorRole: session.role,
+    authorRole: effectiveRole,
     attachments,
   };
 

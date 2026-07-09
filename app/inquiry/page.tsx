@@ -46,6 +46,7 @@ export default function InquiryPage() {
   const [charCount, setCharCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+  const [selectedAttachment, setSelectedAttachment] = useState<InquiryAttachment | null>(null);
 
   const standardLabel = useMemo(() => (isAdmin ? '관리자 문의 관리' : '문의하기'), [isAdmin]);
 
@@ -73,6 +74,15 @@ export default function InquiryPage() {
     setCharCount(message.length);
   }, [message]);
 
+  // close modal on ESC
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setSelectedAttachment(null);
+    }
+    if (selectedAttachment) window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedAttachment]);
+
   useEffect(() => {
     setCurrentPage(1);
   }, [inquiries.length, pageSize]);
@@ -96,6 +106,10 @@ export default function InquiryPage() {
     event.preventDefault();
     if (!subject.trim() || !message.trim()) {
       setNotification('제목과 내용을 모두 입력해주세요.');
+      return;
+    }
+    if (subject.length > 100) {
+      setNotification('문의 제목은 최대 100자까지 입력할 수 있습니다.');
       return;
     }
     if (message.length > 1000) {
@@ -248,6 +262,7 @@ export default function InquiryPage() {
                   className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#10b981]"
                   placeholder="문의 제목을 입력하세요 (최대 100자)"
                 />
+                <div className="mt-2 text-right text-xs text-gray-400">{subject.length}/100</div>
               </div>
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700">내용</label>
@@ -288,20 +303,51 @@ export default function InquiryPage() {
               {attachments.length > 0 ? (
                 <div className="space-y-2 rounded-xl border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700">
                   <p className="font-semibold text-gray-900">첨부 파일</p>
-                  <ul className="space-y-2">
-                    {attachments.map((file) => (
-                      <li key={file.name} className="flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white px-3 py-2">
-                        <span>{file.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteAttachment(file.name)}
-                          className="text-xs font-semibold text-gray-500 hover:text-gray-900"
-                        >
-                          삭제
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="mt-2 -mx-3 overflow-x-auto py-3 px-3 flex gap-3">
+                    {attachments.map((file) => {
+                      const isImage = file.mime.startsWith('image/');
+                      return (
+                        <div key={file.name} className="min-w-[160px] shrink-0 rounded-xl border border-gray-200 bg-white p-2">
+                          {isImage ? (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedAttachment(file)}
+                              className="mb-2 block w-full overflow-hidden rounded-lg border border-gray-200"
+                            >
+                              <img src={file.dataUrl} alt={file.name} className="h-28 w-40 md:h-32 md:w-48 object-cover" />
+                            </button>
+                          ) : null}
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate font-semibold text-gray-900">{file.name}</div>
+                              <div className="mt-1 text-xs text-gray-400">{file.mime}</div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              {isImage ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAttachment(file)}
+                                  className="text-xs font-semibold text-[#10b981] hover:underline"
+                                >
+                                  보기
+                                </button>
+                              ) : null}
+                              <a href={file.dataUrl} download={file.name} className="text-xs font-semibold text-gray-600 hover:text-gray-900">
+                                다운로드
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteAttachment(file.name)}
+                                className="text-xs font-semibold text-gray-500 hover:text-gray-900"
+                              >
+                                삭제
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               ) : null}
             </form>
@@ -359,12 +405,44 @@ export default function InquiryPage() {
                       <div className="mt-4 rounded-xl border border-gray-200 bg-gray-50 p-4">
                         <h4 className="text-sm font-semibold text-gray-800">첨부 파일</h4>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          {item.attachments.map((file) => (
-                            <div key={file.name} className="rounded-xl border border-gray-200 bg-white p-3 text-sm text-gray-700">
-                              <div className="font-semibold">{file.name}</div>
-                              <div className="mt-1 text-xs text-gray-400">{file.mime}</div>
+                            <div className="mt-2 -mx-3 overflow-x-auto py-3 px-3 flex gap-3">
+                              {item.attachments.map((file) => {
+                                const isImage = file.mime.startsWith('image/');
+                                return (
+                                  <div key={`${item.id}-${file.name}`} className="min-w-[160px] shrink-0 rounded-xl border border-gray-200 bg-white p-2 text-sm text-gray-700">
+                                    {isImage ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedAttachment(file)}
+                                        className="mb-2 block w-full overflow-hidden rounded-lg border border-gray-200"
+                                      >
+                                        <img src={file.dataUrl} alt={file.name} className="h-28 w-40 md:h-32 md:w-48 object-cover" />
+                                      </button>
+                                    ) : null}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="min-w-0">
+                                        <div className="truncate font-semibold text-gray-900">{file.name}</div>
+                                        <div className="mt-1 text-xs text-gray-400">{file.mime}</div>
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-2">
+                                        {isImage ? (
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedAttachment(file)}
+                                            className="text-xs font-semibold text-[#10b981] hover:underline"
+                                          >
+                                            보기
+                                          </button>
+                                        ) : null}
+                                        <a href={file.dataUrl} download={file.name} className="text-xs font-semibold text-gray-600 hover:text-gray-900">
+                                          다운로드
+                                        </a>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })}
                             </div>
-                          ))}
                         </div>
                       </div>
                     ) : null}
@@ -446,6 +524,41 @@ export default function InquiryPage() {
           )}
         </section>
       </div>
+
+      {selectedAttachment ? (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setSelectedAttachment(null)}
+        >
+          <div className="w-full max-w-4xl rounded-2xl bg-white p-4 shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-semibold text-gray-900">{selectedAttachment.name}</div>
+                <div className="mt-1 text-xs text-gray-400">{selectedAttachment.mime}</div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <a
+                  href={selectedAttachment.dataUrl}
+                  download={selectedAttachment.name}
+                  className="rounded-lg bg-[#111827] px-3 py-2 text-sm font-semibold text-white transition hover:bg-black"
+                >
+                  다운로드
+                </a>
+                <button
+                  type="button"
+                  onClick={() => setSelectedAttachment(null)}
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 transition hover:border-gray-400"
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+            <div className="flex items-center justify-center overflow-hidden rounded-xl bg-gray-50 p-2">
+              <img src={selectedAttachment.dataUrl} alt={selectedAttachment.name} className="max-h-[70vh] w-full object-contain" />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
