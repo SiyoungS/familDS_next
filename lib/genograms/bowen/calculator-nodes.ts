@@ -506,8 +506,18 @@ export function calculateGenogramLayout(
   const maxX = Math.max(...xValues);
   const maxY = Math.max(...yValues);
 
+  // 정서 오버레이(호)가 최상단 노드 위로 부풀어 잘리지 않도록 가드된 상단 여유공간 확보.
+  // 오버레이가 실제로 존재할 때만 headroom을 추가한다(없으면 결과는 기존과 동일).
+  const EMO_EXTRA_TOP = 130;
+  const overlayNodeIds = new Set(nodes.map(n => n.id));
+  const hasEmotionalOverlay = Array.isArray(data.links) && data.links.some(l =>
+    l.emotional_status !== 'normal' && l.emotional_status !== 'triangle' &&
+    overlayNodeIds.has(l.from) && overlayNodeIds.has(l.to)
+  );
+  const extraTop = hasEmotionalOverlay ? EMO_EXTRA_TOP : 0;
+
   const contentWidth = (maxX - minX) + (config.canvasMargin * 2) + (config.nodeWidthGap * 2);
-  const contentHeight = (maxY - minY) + (config.canvasMargin * 2) + (config.levelHeightGap * 2);
+  const contentHeight = (maxY - minY) + (config.canvasMargin * 2) + (config.levelHeightGap * 2) + extraTop;
 
   // 기본 캔버스는 A4 가로(landscape, 96DPI ≈ 1123×794px) 기준.
   // 내용이 더 크면 그만큼 캔버스를 키우고, 작으면 A4 크기를 유지한 채 가운데 정렬한다.
@@ -521,7 +531,7 @@ export function calculateGenogramLayout(
   const centerY = (dynamicHeight - contentHeight) / 2;
 
   const shiftX = config.canvasMargin - minX + centerX;
-  const shiftY = config.canvasMargin - minY + centerY;
+  const shiftY = config.canvasMargin - minY + centerY + extraTop;
 
   // 노드 좌표 평행 이동
   nodes.forEach(n => {

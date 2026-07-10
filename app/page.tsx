@@ -72,10 +72,17 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ counselText: counselText, counselTarget: counselTarget })
       })
-      .then(res => res.json())
+      .then(async (res) => {
+        const result = await res.json().catch(() => null);
+        // 서버 실패(500 등)·형식 이상 응답은 캔버스로 넘기지 않고 에러 처리 (크래시 방지)
+        if (!res.ok || !Array.isArray(result?.processed?.nodes)) {
+          throw new Error(result?.error || `가계도 생성 요청 실패 (HTTP ${res.status})`);
+        }
+        return result;
+      })
       .then((result) => {
         // { raw: 가공 전, processed: 표시용 }
-        setData(result.processed ?? result);
+        setData(result.processed);
         if (result?.raw) {
           addHistory({ counselTarget, counselText, raw: result.raw });
         }

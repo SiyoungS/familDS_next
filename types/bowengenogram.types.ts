@@ -71,12 +71,14 @@ export interface RelationshipLink {
   emotional_status: 
 
     | 'normal'            // 기본 실선
+    | 'close'             // 이중 실선 (친밀)
     | 'fused'             // 세 줄 실선 (밀착)
     | 'conflictual'       // 지그재그 선 (갈등)
 
     | 'fused_conflictual' // 세 줄 + 지그재그 (밀착된 갈등)
     | 'distant'           // 가는 점선 (소원함)
     | 'cut_off'           // 중간이 끊긴 선 (단절)
+    | 'hostile'           // 굵은 지그재그 (증오/적대)
     | 'triangle';         // 삼각관계 (필요 시 별도 로직)
   
     // 입양/위탁 - 선 스타일
@@ -115,6 +117,7 @@ export interface ChildGroup {
 export interface HouseholdGroup {
   id: string;
   members: string[]; // 포함된 PersonNode ID 목록
+  member_ids?: string[]; // Gemini 스키마/프롬프트가 내보내는 키. 렌더러가 members/member_ids 두 키를 모두 정규화함
   label?: string;    // 예: "현재 함께 거주"
   stroke_style: 'dashed' | 'solid'; // 경계선 스타일
 }

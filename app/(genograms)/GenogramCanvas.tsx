@@ -2,6 +2,8 @@
 
 import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
+import { arcPath, arcZigzag, emotionalBow, edgeEndpoints, arcControl, axis } from '@/lib/genograms/bowen/edge-geometry';
+import type { GeoNode } from '@/lib/genograms/bowen/edge-geometry';
 import { BWGenogramData, PersonNode, ChildGroup } from '@/types/bowengenogram.types';
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { ZoomIn, ZoomOut, Printer, Maximize, Frame, Scaling, Plus, Minus, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -488,6 +490,318 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     return elements;
   };
 
+  // 정서 오버레이용 심볼 반지름 헬퍼 (구조 렌더링과 동일 기준)
+  const radiusOf = (node: PersonNode): number => {
+    if (node.type === 'person') return 25;
+    if (node.type === 'fetus' || node.type === 'stillbirth') return 12;
+    if (node.type === 'miscarriage' || node.type === 'abortion') return 8;
+    return 25;
+  };
+
+  // 동거가족(household) 범위 표시 — 배경 레이어(구조 뒤)
+  // 단일 사각형은 가장 넓은 줄 기준으로 퍼져서 다른 줄의 비구성원 노드까지 가두는 문제가 있음.
+  // → 비구성원 노드가 경계에 갇히지 않도록 세대(줄)별 폭에 맞춘 계단형 외곽선(단일 닫힌 path)을 그린다.
+  const renderHouseholds = (): React.JSX.Element[] => {
+    const elements: React.JSX.Element[] = [];
+    const households = processedData.households ?? [];
+    households.forEach((h, idx) => {
+      const memberIds = h.member_ids ?? h.members ?? [];
+      // 구성원별 좌표 + 세대(relLevel) 수집 — 둘 중 하나라도 없으면 해당 구성원 스킵
+      const members = memberIds
+        .map((id) => {
+          const node = processedData.nodes.find((n) => n.id === id);
+          const pos = nodePositions[id];
+          return node && pos ? { relLevel: node.relLevel, x: pos.x, y: pos.y } : null;
+        })
+        .filter((m): m is { relLevel: number; x: number; y: number } => !!m);
+      if (members.length < 1) return;
+
+      // 세대(relLevel)별로 묶어 줄 단위 범위 계산
+      const byLevel = new Map<number, { x: number; y: number }[]>();
+      members.forEach((m) => {
+        const group = byLevel.get(m.relLevel) ?? [];
+        group.push({ x: m.x, y: m.y });
+        byLevel.set(m.relLevel, group);
+      });
+      // 심볼 반지름(25) + 심볼 아래 이름표(≈60) + 패딩(18) 포함해 확장
+      const rows = [...byLevel.values()]
+        .map((group) => {
+          const xs = group.map((p) => p.x);
+          const ys = group.map((p) => p.y);
+          return {
+            left: Math.min(...xs) - 25 - 18,
+            right: Math.max(...xs) + 25 + 18,
+            top: Math.min(...ys) - 25 - 18,
+            bottom: Math.max(...ys) + 25 + 60 + 18,
+          };
+        })
+        .sort((a, b) => a.top - b.top); // 윗세대(작은 y) 줄부터
+
+      // 인접 줄 사이 경계 y = 두 줄 사이의 중간값 — 틈/겹침 없이 단일 다각형으로 연결
+      const boundaryY = (i: number) => (rows[i].bottom + rows[i + 1].top) / 2;
+      const n = rows.length;
+      const pts: string[] = [
+        `M ${rows[0].left} ${rows[0].top}`,
+        `L ${rows[0].right} ${rows[0].top}`,
+      ];
+      // 오른쪽 변: 위에서 아래로 줄 폭에 맞춰 계단 이동
+      for (let i = 0; i < n - 1; i++) {
+        pts.push(`L ${rows[i].right} ${boundaryY(i)}`);
+        pts.push(`L ${rows[i + 1].right} ${boundaryY(i)}`);
+      }
+      pts.push(`L ${rows[n - 1].right} ${rows[n - 1].bottom}`);
+      pts.push(`L ${rows[n - 1].left} ${rows[n - 1].bottom}`);
+      // 왼쪽 변: 아래에서 위로 줄 폭에 맞춰 계단 이동
+      for (let i = n - 1; i >= 1; i--) {
+        pts.push(`L ${rows[i].left} ${boundaryY(i - 1)}`);
+        pts.push(`L ${rows[i - 1].left} ${boundaryY(i - 1)}`);
+      }
+      pts.push('Z');
+
+      elements.push(
+        <path
+          key={`hh-${h.id ?? idx}`}
+          d={pts.join(' ')}
+          fill="none"
+          stroke="#64748b"
+          strokeWidth={1.5}
+          // 자료 기준: 동거가족 경계는 항상 점선 (LLM이 stroke_style을 'solid'로 줘도 무시)
+          strokeDasharray="8 6"
+          strokeLinejoin="round"
+        />
+      );
+      if (h.label) {
+        elements.push(
+          <text
+            key={`hh-label-${h.id ?? idx}`}
+            x={rows[0].left + 8}
+            y={rows[0].top - 6}
+            fontSize={11}
+            fontWeight={600}
+            fill="#64748b"
+          >
+            {h.label}
+          </text>
+        );
+      }
+    });
+    return elements;
+  };
+
+  // 정서 관계선 오버레이 — 최상위(구조 위)
+  const renderEmotionalLinks = (): React.JSX.Element[] => {
+    const elements: React.JSX.Element[] = [];
+    const links = processedData.links ?? [];
+    const seen = new Set<string>();
+    // 회피 곡률 계산용 전체 노드 GeoNode
+    const allNodes: GeoNode[] = processedData.nodes.map((n) => ({
+      x: n.layoutPosition.x,
+      y: n.layoutPosition.y,
+      r: radiusOf(n),
+    }));
+
+    links.forEach((link, idx) => {
+      const dedupeKey = [link.from, link.to].sort().join('|');
+      if (seen.has(dedupeKey)) return; // 첫 등장만 유지
+      seen.add(dedupeKey);
+
+      const status = link.emotional_status;
+      if (status === 'normal' || status === 'triangle') return; // 그리지 않음
+
+      const fromPos = nodePositions[link.from];
+      const toPos = nodePositions[link.to];
+      if (!fromPos || !toPos) return; // 좌표 없으면 스킵
+
+      const fromNode = processedData.nodes.find((n) => n.id === link.from);
+      const toNode = processedData.nodes.find((n) => n.id === link.to);
+      if (!fromNode || !toNode) return;
+
+      const fromGeo: GeoNode = { x: fromPos.x, y: fromPos.y, r: radiusOf(fromNode) };
+      const toGeo: GeoNode = { x: toPos.x, y: toPos.y, r: radiusOf(toNode) };
+
+      const bow = emotionalBow(fromGeo, toGeo, allNodes);
+      const { x1, y1, x2, y2 } = edgeEndpoints(fromGeo, toGeo);
+
+      switch (status) {
+        case 'close': // 친밀: 이중 평행 호
+          elements.push(
+            <path key={`emo-${idx}-a`} d={arcPath(x1, y1, x2, y2, bow, 2.5)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-b`} d={arcPath(x1, y1, x2, y2, bow, -2.5)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />
+          );
+          break;
+        case 'fused': // 밀착: 삼중 평행 호
+          elements.push(
+            <path key={`emo-${idx}-a`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-b`} d={arcPath(x1, y1, x2, y2, bow, 4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-c`} d={arcPath(x1, y1, x2, y2, bow, -4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />
+          );
+          break;
+        case 'distant': // 소원: 가는 점선 호
+          elements.push(
+            <path key={`emo-${idx}`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="5 5" />
+          );
+          break;
+        case 'conflictual': // 갈등: 지그재그 호
+          elements.push(
+            <path key={`emo-${idx}`} d={arcZigzag(x1, y1, x2, y2, bow, 5, 12)} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeLinecap="round" />
+          );
+          break;
+        case 'fused_conflictual': // 밀착된 갈등: 삼중 녹색 호 + 위에 빨강 지그재그
+          elements.push(
+            <path key={`emo-${idx}-a`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-b`} d={arcPath(x1, y1, x2, y2, bow, 4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-c`} d={arcPath(x1, y1, x2, y2, bow, -4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-z`} d={arcZigzag(x1, y1, x2, y2, bow, 5, 12)} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeLinecap="round" />
+          );
+          break;
+        case 'hostile': // 적대: 굵은 지그재그
+          elements.push(
+            <path key={`emo-${idx}`} d={arcZigzag(x1, y1, x2, y2, bow, 7, 10)} fill="none" stroke="#dc2626" strokeWidth={2.5} strokeLinecap="round" />
+          );
+          break;
+        case 'cut_off': { // 단절: 연속 호 1개 + 중점 접선에 수직 막대 2개(-||-)
+          elements.push(
+            <path key={`emo-${idx}-arc`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />
+          );
+          const { cx, cy } = arcControl(x1, y1, x2, y2, bow);
+          const Bx = 0.25 * x1 + 0.5 * cx + 0.25 * x2;
+          const By = 0.25 * y1 + 0.5 * cy + 0.25 * y2;
+          const { ux, uy, nx, ny } = axis(x1, y1, x2, y2); // nx,ny = 단위 법선
+          const b = 7;
+          const bar = (o: number) =>
+            `M ${Bx + ux * o + nx * b} ${By + uy * o + ny * b} L ${Bx + ux * o - nx * b} ${By + uy * o - ny * b}`;
+          elements.push(
+            <path key={`emo-${idx}-bar1`} d={bar(-5)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key={`emo-${idx}-bar2`} d={bar(5)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />
+          );
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    return elements;
+  };
+
+  // 범례 — 사용된 정서선 유형/동거가족 유무에 따라 좌상단에 표시 (인쇄 포함)
+  const renderLegend = (): React.JSX.Element | null => {
+    const links = processedData.links ?? [];
+    const seen = new Set<string>();
+    const used = new Set<string>();
+    links.forEach((link) => {
+      const dedupeKey = [link.from, link.to].sort().join('|');
+      if (seen.has(dedupeKey)) return;
+      seen.add(dedupeKey);
+      const s = link.emotional_status;
+      if (s === 'normal' || s === 'triangle') return;
+      if (!nodePositions[link.from] || !nodePositions[link.to]) return;
+      used.add(s);
+    });
+    const hasHouseholds = (processedData.households ?? []).some((h) => {
+      const memberIds = h.member_ids ?? h.members ?? [];
+      return memberIds.filter((id) => nodePositions[id]).length >= 1;
+    });
+    if (used.size === 0 && !hasHouseholds) return null;
+
+    const ORDER: { key: string; label: string }[] = [
+      { key: 'close', label: '친밀' },
+      { key: 'fused', label: '밀착' },
+      { key: 'distant', label: '소원' },
+      { key: 'conflictual', label: '갈등' },
+      { key: 'fused_conflictual', label: '밀착된 갈등' },
+      { key: 'cut_off', label: '단절' },
+      { key: 'hostile', label: '적대' },
+    ];
+    const rows = ORDER.filter((r) => used.has(r.key));
+    if (hasHouseholds) rows.push({ key: 'household', label: '동거가족' });
+
+    const x0 = 16;
+    const y0 = 16;
+    const pad = 10;
+    const rowHeight = 20;
+    const boxWidth = 150;
+    const boxHeight = pad * 2 + rows.length * rowHeight;
+    const sx = x0 + pad; // 샘플 시작 x
+    const sw = 28; // 샘플 폭
+    const labelX = sx + sw + 6;
+
+    // 작은 지그재그 폴리라인 포인트 생성(직선 기반 샘플)
+    const zig = (cy: number, amp: number, segs: number) => {
+      const pts: string[] = [];
+      for (let i = 0; i <= segs; i++) {
+        const px = sx + (sw * i) / segs;
+        const s = i === 0 || i === segs ? 0 : i % 2 ? -amp : amp;
+        pts.push(`${px},${cy + s}`);
+      }
+      return pts.join(' ');
+    };
+
+    const sample = (key: string, cy: number): React.JSX.Element[] => {
+      switch (key) {
+        case 'close':
+          return [
+            <line key="s1" x1={sx} y1={cy - 2} x2={sx + sw} y2={cy - 2} stroke="#059669" strokeWidth={1.5} />,
+            <line key="s2" x1={sx} y1={cy + 2} x2={sx + sw} y2={cy + 2} stroke="#059669" strokeWidth={1.5} />,
+          ];
+        case 'fused':
+          return [
+            <line key="s1" x1={sx} y1={cy - 3} x2={sx + sw} y2={cy - 3} stroke="#059669" strokeWidth={1.5} />,
+            <line key="s2" x1={sx} y1={cy} x2={sx + sw} y2={cy} stroke="#059669" strokeWidth={1.5} />,
+            <line key="s3" x1={sx} y1={cy + 3} x2={sx + sw} y2={cy + 3} stroke="#059669" strokeWidth={1.5} />,
+          ];
+        case 'distant':
+          return [
+            <line key="s1" x1={sx} y1={cy} x2={sx + sw} y2={cy} stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="5 5" />,
+          ];
+        case 'conflictual':
+          return [
+            <polyline key="s1" points={zig(cy, 4, 6)} fill="none" stroke="#dc2626" strokeWidth={1.5} />,
+          ];
+        case 'fused_conflictual':
+          return [
+            <line key="s1" x1={sx} y1={cy - 3} x2={sx + sw} y2={cy - 3} stroke="#059669" strokeWidth={1.5} />,
+            <line key="s2" x1={sx} y1={cy} x2={sx + sw} y2={cy} stroke="#059669" strokeWidth={1.5} />,
+            <line key="s3" x1={sx} y1={cy + 3} x2={sx + sw} y2={cy + 3} stroke="#059669" strokeWidth={1.5} />,
+            <polyline key="s4" points={zig(cy, 4, 6)} fill="none" stroke="#dc2626" strokeWidth={1.5} />,
+          ];
+        case 'cut_off':
+          return [
+            <line key="s1" x1={sx} y1={cy} x2={sx + sw} y2={cy} stroke="#94a3b8" strokeWidth={1.5} />,
+            <line key="s2" x1={sx + sw / 2 - 4} y1={cy - 5} x2={sx + sw / 2 - 4} y2={cy + 5} stroke="#94a3b8" strokeWidth={1.5} />,
+            <line key="s3" x1={sx + sw / 2 + 4} y1={cy - 5} x2={sx + sw / 2 + 4} y2={cy + 5} stroke="#94a3b8" strokeWidth={1.5} />,
+          ];
+        case 'hostile':
+          return [
+            <polyline key="s1" points={zig(cy, 6, 6)} fill="none" stroke="#dc2626" strokeWidth={2.5} />,
+          ];
+        case 'household':
+          return [
+            <rect key="s1" x={sx} y={cy - 6} width={sw} height={12} rx={3} fill="none" stroke="#64748b" strokeWidth={1.5} strokeDasharray="4 3" />,
+          ];
+        default:
+          return [];
+      }
+    };
+
+    return (
+      <g>
+        <rect x={x0} y={y0} width={boxWidth} height={boxHeight} rx={8} fill="#ffffff" fillOpacity={0.92} stroke="#e2e8f0" strokeWidth={1} />
+        {rows.map((r, i) => {
+          const cy = y0 + pad + i * rowHeight + rowHeight / 2;
+          return (
+            <g key={`legend-${r.key}`}>
+              {sample(r.key, cy)}
+              <text x={labelX} y={cy + 4} fontSize={11} fill="#334155">
+                {r.label}
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    );
+  };
+
   const zoomPct = Math.round(zoom * 100);
 
   // A4 페이지 경계 가이드라인 (인쇄 시 clone에서 .print-hide 로 제거됨)
@@ -773,8 +1087,9 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         {renderPageGuides()}
         {/* 전체 양수 변환이 끝났으므로 과도한 기본 마진 제거, 레이어 컨테이너 구성 */}
         <g >
+          {renderHouseholds()}
           {renderRelationships()}
-          
+
           {processedData.nodes.map((node) => {
             const { x, y } = node.layoutPosition;
             const isIP = node.attributes.is_ip;
@@ -892,6 +1207,8 @@ export default function GenogramCanvas({ data: initialData }: Props) {
               </g>
             );
           })}
+          {renderEmotionalLinks()}
+          {renderLegend()}
         </g>
       </svg>
       </div>

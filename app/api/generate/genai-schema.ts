@@ -93,7 +93,7 @@ export const bwGenogramSchema = {
           id: { type: Type.STRING },
           from: { type: Type.STRING },
           to: { type: Type.STRING },
-          emotional_status: { type: Type.STRING, enum: ['normal', 'fused', 'conflictual', 'fused_conflictual', 'distant', 'cut_off', 'triangle'] },
+          emotional_status: { type: Type.STRING, enum: ['normal', 'close', 'fused', 'conflictual', 'fused_conflictual', 'distant', 'cut_off', 'hostile', 'triangle'] },
           special_type: { type: Type.STRING, enum: ['adopted', 'foster'] },
         },
         required: ["id", "from", "to", "emotional_status"]
