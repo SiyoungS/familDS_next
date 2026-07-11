@@ -1,12 +1,11 @@
 import { ObjectId } from 'mongodb';
 import clientPromise from '../mongodb';
+import { DB_NAME, INQUIRIES_COLLECTION } from '../auth/config';
 import type { AppInquiry } from '@/types/inquiry';
-
-const COLLECTION_NAME = 'inquiries';
 
 export async function getInquiryCollection() {
   const client = await clientPromise;
-  return client.db().collection<AppInquiry>(COLLECTION_NAME);
+  return client.db(DB_NAME).collection<AppInquiry>(INQUIRIES_COLLECTION);
 }
 
 export async function createInquiry(inquiry: Omit<AppInquiry, 'createdAt' | 'status'>) {

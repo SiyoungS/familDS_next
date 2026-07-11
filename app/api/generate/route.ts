@@ -57,7 +57,7 @@ export async function POST(req: Request) {
   const thisYear = getThisYear(timezoneOffset);
   console.log(`thisYear : ${thisYear}`);
 
-  const systemPrompt = getSystemPrompt_bowen(selectAPI, thisYear);
+  const systemPrompt = await getSystemPrompt_bowen(selectAPI, thisYear);
   let rawData:any = null;
   try {
     if (selectAPI === "gemini") {

@@ -55,7 +55,7 @@ export async function CallGeminiRelations(
     model: modelName,
     contents: `### [현재 연도]\n${thisYear}\n\n### [가족 단위 목록]\n${structureSummary}\n\n### [상담 내용]\n${counselText}`,
     config: {
-      systemInstruction: getRelationsPrompt(),
+      systemInstruction: await getRelationsPrompt(),
       responseMimeType: "application/json",
       responseSchema: relationsSchema,
       temperature: 0,

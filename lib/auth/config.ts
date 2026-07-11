@@ -6,6 +6,8 @@ export const FIREBASE_PROJECT_ID = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID |
 export const DB_NAME = process.env.MONGODB_DB_NAME || process.env.MONGODB_PROJECT_NAME || '';
 export const USERS_COLLECTION = process.env.MONGODB_USERS_COLLECTION || 'users';
 export const HISTORY_COLLECTION = process.env.MONGODB_HISTORY_COLLECTION || 'histories';
+export const INQUIRIES_COLLECTION = process.env.MONGODB_INQUIRIES_COLLECTION || 'inquiries';
+export const PROMPTS_COLLECTION = process.env.MONGODB_PROMPTS_COLLECTION || 'prompts';
 
 // 세션 쿠키 이름
 export const SESSION_COOKIE = 'familyds_session';
