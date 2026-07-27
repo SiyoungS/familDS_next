@@ -1,6 +1,6 @@
 // scripts/seed-prompts.mjs
 //
-// lib/의 프롬프트 txt 파일 3개를 읽어 prompts 컬렉션에 key별로 upsert 한다.
+// lib/의 프롬프트 txt 파일 4개를 읽어 prompts 컬렉션에 key별로 upsert 한다.
 //
 // 실행 방법:
 //   node scripts/seed-prompts.mjs
@@ -54,6 +54,12 @@ const PROMPT_FILES = [
     filePath:
       process.env.PROMPT_RELATIONS_FILE_PATH ||
       path.join(process.cwd(), 'lib', 'prompt-relations.env.txt'),
+  },
+  {
+    key: 'emotions',
+    filePath:
+      process.env.PROMPT_EMOTIONS_FILE_PATH ||
+      path.join(process.cwd(), 'lib', 'prompt-emotions.env.txt'),
   },
 ];
 

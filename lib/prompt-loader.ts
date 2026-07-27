@@ -8,6 +8,7 @@ const FALLBACK_ENV: Record<PromptKey, { envVar: string; defaultPath: string }> =
   contents: { envVar: 'PROMPT_FILE_PATH', defaultPath: './lib/.prompt.env.txt' },
   interface: { envVar: 'PROMPT_TYPE_INTERFACE_FILE_PATH', defaultPath: './lib/.prompt-interface.env.txt' },
   relations: { envVar: 'PROMPT_RELATIONS_FILE_PATH', defaultPath: './lib/prompt-relations.env.txt' },
+  emotions: { envVar: 'PROMPT_EMOTIONS_FILE_PATH', defaultPath: './lib/prompt-emotions.env.txt' },
 };
 
 // DB 우선 → 없으면 파일 폴백으로 프롬프트 조각을 획득한다.
@@ -38,4 +39,9 @@ export async function getSystemPrompt_bowen(apiMode: ApiMode, thisYear: number):
 // [프롬프트 체이닝 2차] 관계 추출용 시스템 프롬프트
 export async function getRelationsPrompt(): Promise<string> {
   return loadPromptPart('relations');
+}
+
+// [프롬프트 체이닝 2차] 정서 관계선 추출용 시스템 프롬프트
+export async function getEmotionsPrompt(): Promise<string> {
+  return loadPromptPart('emotions');
 }

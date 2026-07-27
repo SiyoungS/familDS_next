@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs/promises'; // 비동기 버전 사용 권장
 import path from 'path';
+import { resolveAnonymousNames } from '@/lib/genograms/bowen/prune-anonymous';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
 import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
 
@@ -18,7 +19,8 @@ export async function GET() {
     await delay(2000);
     // JSON 파싱 시도
     const rawData = JSON.parse(fileContent);
-    const orderedData = reorderDisplayOrders(rawData);
+    const resolvedData = resolveAnonymousNames(rawData);
+    const orderedData = reorderDisplayOrders(resolvedData);
     const processedData = calculateGenogramLayout(orderedData);
     console.log('Processed Genogram Data:', JSON.stringify(processedData, null, 2));// 디버깅용 로그
     return NextResponse.json(processedData);

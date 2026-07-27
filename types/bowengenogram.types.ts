@@ -51,9 +51,10 @@ export interface PersonNode {
     // 현재 어떤 유닛에 속해있는가를 알려주는 아이디.
     primary_family_unit_id?: string; // 레이아웃의 중심이 되는 가족 단위 ID
   };
-  relLevel: number; // 세대 및 상대적 위치 
+  relLevel: number; // 세대 및 상대적 위치
   generation: number;
   display_order: number;
+  subRow?: number; // 세대 내 줄(0=형제자매 줄, 1=IP 부부 줄). 레이아웃 엔진이 파생 계산.
   layoutPosition: {
     x: number;
     y: number;

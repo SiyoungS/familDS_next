@@ -2,11 +2,12 @@
 
 import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
+import { resolveAnonymousNames, removeNodesFromData } from '@/lib/genograms/bowen/prune-anonymous';
 import { arcPath, arcZigzag, emotionalBow, edgeEndpoints, arcControl, axis } from '@/lib/genograms/bowen/edge-geometry';
 import type { GeoNode } from '@/lib/genograms/bowen/edge-geometry';
 import { BWGenogramData, PersonNode, ChildGroup } from '@/types/bowengenogram.types';
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { ZoomIn, ZoomOut, Printer, Maximize, Frame, Scaling, Plus, Minus, HelpCircle, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ZoomIn, ZoomOut, Printer, Maximize, Frame, Scaling, Plus, Minus, HelpCircle, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 
 interface Props { data: BWGenogramData; }
 
@@ -23,19 +24,188 @@ const CS_STEP = 1.15;
 const A4_PAGE_W = 1047;
 const A4_PAGE_H = 718;
 
+// 나이 표기 방식: 만 나이(actual, 기본) / 연 나이(calendar) / 한국식 나이(korean)
+type AgeMode = 'actual' | 'calendar' | 'korean';
+
+// 'IP의 현재 배우자' 판정: is_spouse_of_ip 우선, 없으면 IP 결혼 유닛 중 marriage_order 최댓값의 상대.
+// (reorder-nodes.ts의 '현재 배우자' 판정 규칙과 동일한 기준을 데이터 필터 단계에서도 재사용)
+function findCurrentSpouse(data: BWGenogramData): PersonNode | null {
+  const nodes = data.nodes || [];
+  const ip = nodes.find((n) => n.attributes?.is_ip);
+  if (!ip) return null;
+  const spouseFlagged = nodes.find((n) => n.attributes?.is_spouse_of_ip);
+  if (spouseFlagged) return spouseFlagged;
+
+  const nodeMap = new Map(nodes.map((n) => [n.id, n]));
+  const ipSpouses = (data.familyUnits || [])
+    .filter((fu) => fu.parent_ids.includes(ip.id))
+    .map((fu) => ({
+      order: fu.marriage_order || 0,
+      node: nodeMap.get(fu.parent_ids.find((pId) => pId !== ip.id) || ''),
+    }))
+    .filter((x): x is { order: number; node: PersonNode } => !!x.node)
+    .sort((a, b) => a.order - b.order)
+    .map((x) => x.node);
+
+  return ipSpouses.length > 0 ? ipSpouses[ipSpouses.length - 1] : null;
+}
+
+// '친정 부모(배우자 측) 표시' 필터용: 현재 배우자가 child로 속한 원가족 유닛의 parent_ids를
+// 시작점으로, 그 원가족 유닛의 child_ids로는 내려가지 않는 조건으로(=배우자 본인과 배우자의
+// 형제자매는 순회 대상에서 제외) 가족 그래프(유닛 멤버십)를 따라 도달 가능한 모든 노드를 모은다.
+function collectSpouseParentFamilyIds(data: BWGenogramData): Set<string> {
+  const removed = new Set<string>();
+  const spouse = findCurrentSpouse(data);
+  if (!spouse) return removed;
+
+  const units = data.familyUnits || [];
+  const originUnit = units.find((fu) => fu.childGroups?.some((cg) => cg.child_ids.includes(spouse.id)));
+  if (!originUnit || (originUnit.parent_ids || []).length === 0) return removed;
+
+  // 배우자의 원가족 유닛만 제외한 노드-노드 인접 그래프 구성(유닛 멤버 = 서로 연결된 clique).
+  // 이렇게 하면 시작점(배우자의 부모)에서 출발한 순회가 그 유닛의 자녀(배우자·배우자 형제) 쪽으로
+  // 다시 내려가지 않는다.
+  const adj = new Map<string, Set<string>>();
+  const ensure = (id: string) => {
+    if (!adj.has(id)) adj.set(id, new Set());
+    return adj.get(id)!;
+  };
+  units.forEach((unit) => {
+    if (unit.id === originUnit.id) return;
+    const memberIds = new Set<string>([
+      ...(unit.parent_ids || []),
+      ...(unit.childGroups || []).flatMap((cg) => cg.child_ids),
+    ]);
+    const members = Array.from(memberIds);
+    for (let i = 0; i < members.length; i++) {
+      for (let j = i + 1; j < members.length; j++) {
+        ensure(members[i]).add(members[j]);
+        ensure(members[j]).add(members[i]);
+      }
+    }
+  });
+
+  const queue: string[] = [...originUnit.parent_ids];
+  const visited = new Set<string>(queue);
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    adj.get(cur)?.forEach((next) => {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    });
+  }
+  visited.forEach((id) => removed.add(id));
+  return removed;
+}
+
+// '친정 부모(배우자 측) 표시' 토글이 꺼져 있을 때(기본) 적용하는 데이터 필터.
+// 배우자의 부모와 그 윗세대 전체를 제거하고, 유닛/링크/households 정리는
+// prune-anonymous.ts의 removeNodesFromData를 그대로 재사용한다.
+function filterSpouseParentFamily(data: BWGenogramData): BWGenogramData {
+  const ids = collectSpouseParentFamilyIds(data);
+  if (ids.size === 0) return data;
+  return removeNodesFromData(data, ids);
+}
+
+// 나이 표기 계산: 만 나이(actual, 기본) / 연 나이(calendar) / 한국식 나이(korean). 결과 없으면 null.
+function displayAge(node: PersonNode, mode: AgeMode, thisYear: number): number | null {
+  const birthDateStr = node.attributes.birth_date;
+  const birthYearMatch = birthDateStr ? String(birthDateStr).match(/\d{4}/) : null;
+  const birthYear = birthYearMatch ? Number(birthYearMatch[0]) : null;
+  const age = node.attributes.age;
+
+  if (mode === 'calendar') {
+    // 연나이 = thisYear - birthYear (있을 때), 없으면 age 폴백
+    return birthYear != null ? thisYear - birthYear : (age ?? null);
+  }
+  if (mode === 'korean') {
+    // 한국나이 = 연나이 + 1 (birthYear 있을 때), 없으면 age + 1
+    if (birthYear != null) return thisYear - birthYear + 1;
+    return age != null ? age + 1 : null;
+  }
+  // 만나이(기본): age가 있으면 그대로(LLM이 만 나이 기준으로 추출), 없으면
+  // birth_date가 yyyy.MM.dd 전체 날짜면 정확 계산, 연도만 있으면 thisYear - birthYear
+  if (age != null) return age;
+  if (birthDateStr) {
+    const fullMatch = String(birthDateStr).match(/(\d{4})[.\-/](\d{1,2})[.\-/](\d{1,2})/);
+    if (fullMatch) {
+      const [, y, m, d] = fullMatch;
+      const birth = new Date(Number(y), Number(m) - 1, Number(d));
+      const now = new Date();
+      let a = now.getFullYear() - birth.getFullYear();
+      const hadBirthdayThisYear =
+        now.getMonth() > birth.getMonth() ||
+        (now.getMonth() === birth.getMonth() && now.getDate() >= birth.getDate());
+      if (!hadBirthdayThisYear) a -= 1;
+      return a;
+    }
+    if (birthYear != null) return thisYear - birthYear;
+  }
+  return null;
+}
+
+// 계단형 다각형(오목 코너 포함)의 각 꼭짓점을 라운드 처리한 SVG path 문자열을 만든다.
+// 코너 반경은 인접한 두 변 길이의 절반을 넘지 않도록 클램프해 자기교차를 방지한다.
+function roundedPolygonPath(points: { x: number; y: number }[], radius: number): string {
+  const n = points.length;
+  if (n < 3) return '';
+  const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(b.x - a.x, b.y - a.y);
+  const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, t: number) => ({
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  });
+
+  const segs: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const prev = points[(i - 1 + n) % n];
+    const cur = points[i];
+    const next = points[(i + 1) % n];
+    const dPrev = dist(prev, cur);
+    const dNext = dist(cur, next);
+    const r = dPrev > 0 && dNext > 0 ? Math.max(0, Math.min(radius, dPrev / 2, dNext / 2)) : 0;
+    const startPt = r > 0 ? lerp(cur, prev, r / dPrev) : cur;
+    const endPt = r > 0 ? lerp(cur, next, r / dNext) : cur;
+    segs.push(i === 0 ? `M ${startPt.x} ${startPt.y}` : `L ${startPt.x} ${startPt.y}`);
+    if (r > 0) segs.push(`Q ${cur.x} ${cur.y} ${endPt.x} ${endPt.y}`);
+  }
+  segs.push('Z');
+  return segs.join(' ');
+}
+
 export default function GenogramCanvas({ data: initialData }: Props) {
-  // 1. 순서 재정렬 후 물리적인 양수 좌표 및 캔버스 크기 최종 산출
+  // 친정 부모(배우자 측) 표시 — 기본 OFF(생략). IP에게 배우자가 없으면 토글은 무의미.
+  const [showSpouseFamily, setShowSpouseFamily] = useState(false);
+  // 인물 텍스트(이름·나이) 표시 — 기본 OFF.
+  const [showLabels, setShowLabels] = useState(false);
+  // 출생 나이 표시 — 기본 ON. showLabels의 하위 옵션.
+  const [showAgeInLabel, setShowAgeInLabel] = useState(true);
+  // 출생 서열(N째) 표시 — 기본 OFF. showLabels의 하위 옵션.
+  const [showBirthOrder, setShowBirthOrder] = useState(false);
+  // 나이 표기 방식 — 기본 만 나이. showLabels의 하위 옵션.
+  const [ageMode, setAgeMode] = useState<AgeMode>('actual');
+  // 표시 옵션 팝오버
+  const [optionsOpen, setOptionsOpen] = useState(false);
+
+  const hasSpouse = useMemo(() => !!findCurrentSpouse(initialData), [initialData]);
+
+  // 1. (필요시) 친정 부모 측 필터 → 익명 이름을 관계 지칭으로 변환 → 순서 재정렬 → 물리적인 양수 좌표 및 캔버스 크기 최종 산출
+  // 토글 ON: 필터 없음(친정 부모+윗세대 포함 전부 표시).
+  // 토글 OFF(기본): 배우자 측 부모+윗세대 서브트리 전체 제거(익명 여부 무관, 기존 그대로).
   const processedData = useMemo(() => {
-    const ordered = reorderDisplayOrders(initialData);
+    const base = showSpouseFamily ? initialData : filterSpouseParentFamily(initialData);
+    const resolved = resolveAnonymousNames(base);
+    const ordered = reorderDisplayOrders(resolved);
     return calculateGenogramLayout(ordered);
-  }, [initialData]);
+  }, [initialData, showSpouseFamily]);
 
   // 확대/축소 상태 (1 = 100%) — 화면 보기 전용, 인쇄에는 미반영
   const [zoom, setZoom] = useState(1);
   // 출력 배율(도형 크기, 1 = 100%) — 실제 출력 크기, 인쇄 페이지 수/가이드에 반영
   const [contentScale, setContentScale] = useState(1);
-  // A4 페이지 가이드라인 표시 여부 (인쇄에는 나오지 않음)
-  const [showGuide, setShowGuide] = useState(true);
+  // A4 페이지 가이드라인 표시 여부 (인쇄에는 나오지 않음) — 기본 비표시
+  const [showGuide, setShowGuide] = useState(false);
   // 사용 설명서 팝업
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpPage, setHelpPage] = useState(0);
@@ -282,14 +452,50 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     const marriageLineDepth = 45; 
 
     processedData.familyUnits.forEach((unit, idx) => {
-      const parents = unit.parent_ids.map(id => ({
-        id, 
-        pos: nodePositions[id], 
-        node: processedData.nodes.find(n => n.id === id)
-      }));
+      const parents = unit.parent_ids
+        .map(id => ({
+          id,
+          pos: nodePositions[id],
+          node: processedData.nodes.find(n => n.id === id)
+        }))
+        // 좌표 있는 부모만(친정 부모 필터 등으로 제거된 부모는 좌표가 없음)
+        .filter(p => !!p.pos);
 
-      // 부모 좌표 최소 1명 확보 검증
-      if (parents.length === 0 || !parents[0].pos) return;
+      // 부모가 0명(둘 다 없음)인 유닛: 자녀가 2명 이상이면 형제 바만 그리고 종료.
+      if (parents.length === 0) {
+        const childIds = (unit.childGroups || []).flatMap(g => g.child_ids);
+        const childNodesForBar = childIds
+          .map(id => ({ id, pos: nodePositions[id], node: processedData.nodes.find(n => n.id === id) }))
+          .filter((c): c is { id: string; pos: { x: number; y: number }; node: PersonNode } => !!c.pos && !!c.node);
+
+        if (childNodesForBar.length >= 2) {
+          const xs = childNodesForBar.map(c => c.pos.x);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const barY = Math.min(...childNodesForBar.map(c => c.pos.y)) - 75;
+
+          elements.push(
+            <line
+              key={`orphan-bar-${unit.id}-${idx}`}
+              x1={minX} y1={barY} x2={maxX} y2={barY}
+              stroke="#333"
+              strokeWidth="2"
+            />
+          );
+          childNodesForBar.forEach((c, cIdx) => {
+            const top = c.node.type === 'person' ? 25 : (c.node.type === 'fetus' || c.node.type === 'stillbirth') ? 12 : 8;
+            elements.push(
+              <line
+                key={`orphan-v-${unit.id}-${idx}-${cIdx}`}
+                x1={c.pos.x} y1={barY} x2={c.pos.x} y2={c.pos.y - top}
+                stroke="#333"
+                strokeWidth="2"
+              />
+            );
+          });
+        }
+        return; // 자녀 1명 이하면 그리지 않고 종료(기존과 동일)
+      }
 
       let coupleMidX: number;
       let coupleBottomY: number;
@@ -504,35 +710,39 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   const renderHouseholds = (): React.JSX.Element[] => {
     const elements: React.JSX.Element[] = [];
     const households = processedData.households ?? [];
+    const ip = processedData.nodes.find((n) => n.attributes?.is_ip);
     households.forEach((h, idx) => {
       const memberIds = h.member_ids ?? h.members ?? [];
-      // 구성원별 좌표 + 세대(relLevel) 수집 — 둘 중 하나라도 없으면 해당 구성원 스킵
+      // IP(내담자) 가족만 표시 — 그 외 동거가족은 추후 다른 인물 기준 표시 기능에서 다룰 예정
+      if (!ip || !memberIds.includes(ip.id)) return;
+      // 구성원별 좌표 수집 — 좌표가 없으면 해당 구성원 스킵
       const members = memberIds
         .map((id) => {
           const node = processedData.nodes.find((n) => n.id === id);
           const pos = nodePositions[id];
-          return node && pos ? { relLevel: node.relLevel, x: pos.x, y: pos.y } : null;
+          return node && pos ? { x: pos.x, y: pos.y } : null;
         })
-        .filter((m): m is { relLevel: number; x: number; y: number } => !!m);
+        .filter((m): m is { x: number; y: number } => !!m);
       if (members.length < 1) return;
 
-      // 세대(relLevel)별로 묶어 줄 단위 범위 계산
-      const byLevel = new Map<number, { x: number; y: number }[]>();
+      // 실제 y값(줄)별로 묶어 줄 단위 범위 계산 — 같은 세대(relLevel)도 subRow로 y가
+      // 2종(150px 차이)일 수 있으므로 relLevel이 아닌 y값 자체를 그룹 키로 쓴다.
+      const byRowY = new Map<number, { x: number; y: number }[]>();
       members.forEach((m) => {
-        const group = byLevel.get(m.relLevel) ?? [];
+        const group = byRowY.get(m.y) ?? [];
         group.push({ x: m.x, y: m.y });
-        byLevel.set(m.relLevel, group);
+        byRowY.set(m.y, group);
       });
-      // 심볼 반지름(25) + 심볼 아래 이름표(≈60) + 패딩(18) 포함해 확장
-      const rows = [...byLevel.values()]
+      // 심볼 반지름(25) + 심볼 아래 이름표(≈60) + 패딩(32) 포함해 확장
+      const rows = [...byRowY.values()]
         .map((group) => {
           const xs = group.map((p) => p.x);
           const ys = group.map((p) => p.y);
           return {
-            left: Math.min(...xs) - 25 - 18,
-            right: Math.max(...xs) + 25 + 18,
-            top: Math.min(...ys) - 25 - 18,
-            bottom: Math.max(...ys) + 25 + 60 + 18,
+            left: Math.min(...xs) - 25 - 32,
+            right: Math.max(...xs) + 25 + 32,
+            top: Math.min(...ys) - 25 - 32,
+            bottom: Math.max(...ys) + 25 + 60 + 32,
           };
         })
         .sort((a, b) => a.top - b.top); // 윗세대(작은 y) 줄부터
@@ -540,33 +750,35 @@ export default function GenogramCanvas({ data: initialData }: Props) {
       // 인접 줄 사이 경계 y = 두 줄 사이의 중간값 — 틈/겹침 없이 단일 다각형으로 연결
       const boundaryY = (i: number) => (rows[i].bottom + rows[i + 1].top) / 2;
       const n = rows.length;
-      const pts: string[] = [
-        `M ${rows[0].left} ${rows[0].top}`,
-        `L ${rows[0].right} ${rows[0].top}`,
+      const pts: { x: number; y: number }[] = [
+        { x: rows[0].left, y: rows[0].top },
+        { x: rows[0].right, y: rows[0].top },
       ];
       // 오른쪽 변: 위에서 아래로 줄 폭에 맞춰 계단 이동
       for (let i = 0; i < n - 1; i++) {
-        pts.push(`L ${rows[i].right} ${boundaryY(i)}`);
-        pts.push(`L ${rows[i + 1].right} ${boundaryY(i)}`);
+        pts.push({ x: rows[i].right, y: boundaryY(i) });
+        pts.push({ x: rows[i + 1].right, y: boundaryY(i) });
       }
-      pts.push(`L ${rows[n - 1].right} ${rows[n - 1].bottom}`);
-      pts.push(`L ${rows[n - 1].left} ${rows[n - 1].bottom}`);
+      pts.push({ x: rows[n - 1].right, y: rows[n - 1].bottom });
+      pts.push({ x: rows[n - 1].left, y: rows[n - 1].bottom });
       // 왼쪽 변: 아래에서 위로 줄 폭에 맞춰 계단 이동
       for (let i = n - 1; i >= 1; i--) {
-        pts.push(`L ${rows[i].left} ${boundaryY(i - 1)}`);
-        pts.push(`L ${rows[i - 1].left} ${boundaryY(i - 1)}`);
+        pts.push({ x: rows[i].left, y: boundaryY(i - 1) });
+        pts.push({ x: rows[i - 1].left, y: boundaryY(i - 1) });
       }
-      pts.push('Z');
 
       elements.push(
         <path
           key={`hh-${h.id ?? idx}`}
-          d={pts.join(' ')}
+          // '소원' 정서선(#94a3b8, 5 5 점선)과 구분: 진한 색 + 큰 라운드 코너 + 촘촘한 dot 패턴.
+          d={roundedPolygonPath(pts, 36)}
           fill="none"
-          stroke="#64748b"
+          stroke="#475569"
           strokeWidth={1.5}
           // 자료 기준: 동거가족 경계는 항상 점선 (LLM이 stroke_style을 'solid'로 줘도 무시)
-          strokeDasharray="8 6"
+          // 점 크기 0.5(+둥근 캡) 유지, 간격 6 = 점 2개 분량의 공백 (round 캡이 양쪽 0.75씩 잠식)
+          strokeDasharray="0.5 6"
+          strokeLinecap="round"
           strokeLinejoin="round"
         />
       );
@@ -578,7 +790,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
             y={rows[0].top - 6}
             fontSize={11}
             fontWeight={600}
-            fill="#64748b"
+            fill="#475569"
           >
             {h.label}
           </text>
@@ -777,7 +989,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           ];
         case 'household':
           return [
-            <rect key="s1" x={sx} y={cy - 6} width={sw} height={12} rx={3} fill="none" stroke="#64748b" strokeWidth={1.5} strokeDasharray="4 3" />,
+            <rect key="s1" x={sx} y={cy - 6} width={sw} height={12} rx={6} fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="0.5 6" strokeLinecap="round" />,
           ];
         default:
           return [];
@@ -899,7 +1111,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   return (
     <div className="relative z-10 w-full h-full">
       {/* 확대/축소·인쇄 컨트롤 (스크롤과 무관하게 좌하단 고정) */}
-      <div className={`absolute bottom-3 left-3 flex items-center gap-1 rounded-xl border border-slate-200 bg-white/80 p-1 shadow-md backdrop-blur ${helpOpen ? 'z-40 pointer-events-none' : 'z-20'}`}>
+      <div className={`absolute bottom-3 left-3 flex items-center gap-1 rounded-xl border border-slate-200 bg-white/80 p-1 shadow-md backdrop-blur ${(helpOpen || optionsOpen) ? 'z-40 pointer-events-none' : 'z-20'}`}>
         {/* 사용 설명서 열기 (가장 좌측) */}
         <button
           type="button"
@@ -1004,6 +1216,18 @@ export default function GenogramCanvas({ data: initialData }: Props) {
         >
           <Printer size={18} />
         </button>
+        <span className="mx-0.5 h-5 w-px bg-slate-200" aria-hidden />
+        {/* 표시 옵션(친정 부모 표시 / 출생 서열 / 나이 표기 방식) */}
+        <button
+          type="button"
+          onClick={() => setOptionsOpen((v) => !v)}
+          title="표시 옵션"
+          aria-label="표시 옵션 열기"
+          aria-pressed={optionsOpen}
+          className={`flex h-8 w-8 items-center justify-center rounded-lg transition hover:bg-slate-100 ${optionsOpen ? 'bg-blue-50 text-blue-600' : 'text-slate-600'}`}
+        >
+          <SlidersHorizontal size={18} />
+        </button>
       </div>
 
       {/* 사용 설명서: 전체 dim + 컨트롤러만 보이게 + 설명 팝업 */}
@@ -1060,6 +1284,131 @@ export default function GenogramCanvas({ data: initialData }: Props) {
               >
                 <ChevronRight size={18} />
               </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* 표시 옵션: 전체 dim + 컨트롤러만 보이게 + 옵션 팝오버 (사용 설명서와 동일한 스타일 계열) */}
+      {optionsOpen && (
+        <>
+          <div
+            className="absolute inset-0 z-30 bg-black/50"
+            onClick={() => setOptionsOpen(false)}
+          />
+          <div className="absolute bottom-16 right-3 z-40 w-[300px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                <SlidersHorizontal size={18} />
+              </span>
+              <h3 className="text-sm font-bold text-slate-800">표시 옵션</h3>
+              <button
+                type="button"
+                onClick={() => setOptionsOpen(false)}
+                className="ml-auto rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-slate-900"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {/* 인물 텍스트(이름·나이) 표시 — 기본 OFF. 아래 세 항목은 이 옵션의 하위(포함) 옵션 */}
+              <label className="flex cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-slate-700">
+                <span>인물 텍스트(이름·나이) 표시</span>
+                <input
+                  type="checkbox"
+                  checked={showLabels}
+                  onChange={(e) => setShowLabels(e.target.checked)}
+                  className="h-4 w-4 accent-blue-600"
+                />
+              </label>
+
+              {/* 인물 텍스트 하위 옵션: showLabels가 꺼지면 전부 비활성화 */}
+              <div className="ml-3 space-y-2 border-l-2 border-slate-100 pl-3">
+                {/* a) 출생 나이 표시 — 기본 ON */}
+                <label
+                  className={`flex items-center justify-between gap-2 text-xs font-semibold ${
+                    showLabels ? 'text-slate-700 cursor-pointer' : 'text-slate-300 cursor-not-allowed'
+                  }`}
+                >
+                  <span>출생 나이 표시</span>
+                  <input
+                    type="checkbox"
+                    checked={showAgeInLabel}
+                    disabled={!showLabels}
+                    onChange={(e) => setShowAgeInLabel(e.target.checked)}
+                    className="h-4 w-4 accent-blue-600 disabled:opacity-40"
+                  />
+                </label>
+
+                {/* b) 나이 표기 방식 — 만 나이(기본) / 연 나이 / 한국식 나이. showLabels 또는 showAgeInLabel이 꺼지면 비활성화 */}
+                <div>
+                  <div
+                    className={`mb-1 text-xs font-semibold ${
+                      showLabels && showAgeInLabel ? 'text-slate-700' : 'text-slate-300'
+                    }`}
+                  >
+                    나이 표기 방식
+                  </div>
+                  <div className="flex gap-1 rounded-lg bg-slate-100 p-1">
+                    {(
+                      [
+                        { key: 'actual', label: '만 나이' },
+                        { key: 'calendar', label: '연 나이' },
+                        { key: 'korean', label: '한국식 나이' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        disabled={!showLabels || !showAgeInLabel}
+                        onClick={() => setAgeMode(opt.key)}
+                        className={`flex-1 rounded-md px-2 py-1 text-[11px] font-semibold transition ${
+                          !showLabels || !showAgeInLabel
+                            ? 'text-slate-300 cursor-not-allowed'
+                            : ageMode === opt.key
+                              ? 'bg-white text-blue-600 shadow-sm'
+                              : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* c) 출생 서열(N째) 표시 — 기본 OFF */}
+                <label
+                  className={`flex items-center justify-between gap-2 text-xs font-semibold ${
+                    showLabels ? 'text-slate-700 cursor-pointer' : 'text-slate-300 cursor-not-allowed'
+                  }`}
+                >
+                  <span>출생 서열(N째) 표시</span>
+                  <input
+                    type="checkbox"
+                    checked={showBirthOrder}
+                    disabled={!showLabels}
+                    onChange={(e) => setShowBirthOrder(e.target.checked)}
+                    className="h-4 w-4 accent-blue-600 disabled:opacity-40"
+                  />
+                </label>
+              </div>
+
+              {/* 친정 부모(배우자 측) 표시 — 기본 OFF, 배우자가 없으면 비활성화. showLabels와 무관한 별도 옵션 */}
+              <label
+                className={`flex items-center justify-between gap-2 text-xs font-semibold ${
+                  hasSpouse ? 'text-slate-700 cursor-pointer' : 'text-slate-300 cursor-not-allowed'
+                }`}
+              >
+                <span>친정 부모(배우자 측) 표시</span>
+                <input
+                  type="checkbox"
+                  checked={showSpouseFamily}
+                  disabled={!hasSpouse}
+                  onChange={(e) => setShowSpouseFamily(e.target.checked)}
+                  className="h-4 w-4 accent-blue-600 disabled:opacity-40"
+                />
+              </label>
             </div>
           </div>
         </>
@@ -1143,7 +1492,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                   <circle r={20} fill="none" stroke="#2563eb" strokeWidth="1.5" />
                 )}
 
-                {/* 3.5 출생연도(좌상단) · 사망연도(우상단) · 나이(중앙, 최상위) — 일반 인물만 */}
+                {/* 3.5 출생연도(좌상단) · 사망연도(우상단) — 일반 인물만 */}
                 {node.type === 'person' && (() => {
                   const yy = (s?: string) => {
                     if (!s) return '';
@@ -1158,7 +1507,6 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                     by = yy(String(new Date().getFullYear() - node.attributes.age));
                   }
                   const dy = yy(node.attributes.death_date);
-                  const showAge = node.attributes.age != null;
                   return (
                     <>
                       {by ? (
@@ -1167,36 +1515,52 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                       {dy ? (
                         <text x={28} y={-30} textAnchor="start" fontSize="10" fontWeight={600} fill="#64748b">{dy}</text>
                       ) : null}
-                      {/* 나이: 건강 색칠(배경) 위에 겹쳐 보이도록 최상위에 배치 */}
-                      {showAge ? (
-                        <text x={0} y={6} textAnchor="middle" fontSize="15" fontWeight={700} fill="#0f172a">{node.attributes.age}</text>
-                      ) : null}
                     </>
                   );
                 })()}
 
-                {/* 4. 하단 텍스트 이름표 및 출생 순위 라벨링 */}
+                {/* 4. 하단 텍스트 이름표 및 출생 순위·나이 라벨링 */}
                 {(() => {
-                  const nameText = `${node.name}${node.attributes.birth_order ? ` (${node.attributes.birth_order}째)` : ''}`;
+                  if (!showLabels) return null;
+                  // 유지된 익명 구조 연결자(name === '')는 라벨 전체를 생략(빈 도형만 유지)
+                  if (!node.name?.trim()) return null;
+
+                  const rawBirthOrder = node.attributes.birth_order;
+                  const birthOrder = Number.isInteger(rawBirthOrder) && rawBirthOrder >= 1 ? rawBirthOrder : null;
+                  const showOrder = showBirthOrder && birthOrder != null;
+                  // 나이(displayAge() 기준) — 일반 인물(person)만 표기 대상, 출생 나이 표시 토글이 꺼지면 생략
+                  const ageValue = showAgeInLabel && node.type === 'person' ? displayAge(node, ageMode, new Date().getFullYear()) : null;
+                  const hasAge = ageValue != null;
+
+                  // 서열/나이 결합 괄호 표기: 서열ON+나이있음 "(N째/M세)" / 서열OFF+나이있음 "(M세)" /
+                  // 서열ON+나이없음 "(N째)" / 둘 다 없으면 괄호 줄 생략
+                  const bracketText = showOrder && hasAge
+                    ? `(${birthOrder}째/${ageValue}세)`
+                    : hasAge
+                      ? `(${ageValue}세)`
+                      : showOrder
+                        ? `(${birthOrder}째)`
+                        : '';
+                  const nameText = `${node.name}${bracketText ? ` ${bracketText}` : ''}`;
                   const nameLength = nameText.length;
-                  
+
                   // 글자 수에 따라 동적으로 가로 폭을 계산하되, 최소 100px에서 최대 160px 사이로 제한합니다.
                   const dynamicBoxWidth = Math.min(120, Math.max(100, nameLength * 11));
-                  
+
                   // 말줄임(truncate)을 제거하고, 글자가 길어지면 아래로 늘어날 수 있도록 높이를 넉넉히(80px) 잡습니다.
                   return (
-                    <foreignObject 
-                      x={-(dynamicBoxWidth / 2)} 
-                      y={32} 
-                      width={dynamicBoxWidth} 
+                    <foreignObject
+                      x={-(dynamicBoxWidth / 2)}
+                      y={32}
+                      width={dynamicBoxWidth}
                       height={80} // 2~3줄 줄바꿈을 대비해 높이를 확장
                     >
                       <div className="w-full text-[11px] text-center font-semibold leading-tight text-black flex justify-center">
                         <span className="border bg-slate-50 border-slate-200 shadow-sm px-2 py-1 block rounded w-full break-all whitespace-normal">
                           {node.name}
-                          {node.attributes.birth_order && (
+                          {bracketText && (
                             <span className="text-slate-500 font-normal block mt-0.5">
-                              ({node.attributes.birth_order}째)
+                              {bracketText}
                             </span>
                           )}
                         </span>

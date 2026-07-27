@@ -41,6 +41,9 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
           } else {
             insertedNodeArray.push(partnerNode, node);
           }
+        } else {
+          // [C-1] 파트너를 nodeMap에서 못 찾아도(익명 배우자 제거 등) 노드 자신은 드랍하지 않는다.
+          insertedNodeArray.push(node);
         }
       } else {
         insertedNodeArray.push(node);
@@ -61,6 +64,9 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         } else {
           insertedNodeArray.push(partnerNode, node);
         }
+      } else {
+        // [C-1] 파트너를 nodeMap에서 못 찾아도(익명 배우자 제거 등) 노드 자신은 드랍하지 않는다.
+        insertedNodeArray.push(node);
       }
     } else {
       insertedNodeArray.push(node);
@@ -76,6 +82,10 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       return [nodeB, nodeA];
     }
   }
+  // C-3(subRow 계산)에서 사용할 0세대 부부 집합/형제 존재 여부. level===0 처리 중 채워진다.
+  let coupleIds = new Set<string>();
+  let hasGen0Siblings = false;
+
   console.log("===Start reordering display_orders by relLevel===");
   // 각 세대별 정렬 처리
   Object.keys(levelGroups).forEach(levelStr => {
@@ -132,40 +142,53 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         .sort((a, b) => a.order - b.order)
         .map(x => x.node);
 
-      // 현재 배우자의 이전 파트너 등(블렌디드) + 배우자의 형제군 블록
-      const extraPartners: PersonNode[] = [];
+      // '현재 배우자' 판정: is_spouse_of_ip 우선, 없으면 IP 결혼 유닛 중 marriage_order 최댓값의 상대(=ipSpouses 마지막)
       const spouseNode = group.find(n => n.attributes.is_spouse_of_ip);
-      // 배우자 형제군 블록: 배우자를 자기 출생순서 위치에 둔 '연속' 블록 [손위, 배우자, 손아래]
-      let spouseBlock: PersonNode[] = [];
-      if (spouseNode) {
-        familyUnits.filter(fu => fu.parent_ids.includes(spouseNode.id)).forEach(fu => {
-          const partnerID = fu.parent_ids.find(pId => pId !== spouseNode.id);
+      const currentSpouse: PersonNode | null = spouseNode || (ipSpouses.length > 0 ? ipSpouses[ipSpouses.length - 1] : null);
+      // IP 전 배우자들: ipSpouses 중 현재 배우자를 제외한 나머지 (marriage_order 오름차순 유지)
+      const ipExSpouses = currentSpouse ? ipSpouses.filter(n => n.id !== currentSpouse.id) : ipSpouses;
+
+      // 현재 배우자의 다른 파트너들(블렌디드) + 배우자 형제군(손위/손아래)
+      const extraPartners: PersonNode[] = [];
+      let spouseOlderSiblings: PersonNode[] = [];
+      let spouseYoungerSiblings: PersonNode[] = [];
+      if (currentSpouse) {
+        familyUnits.filter(fu => fu.parent_ids.includes(currentSpouse.id)).forEach(fu => {
+          const partnerID = fu.parent_ids.find(pId => pId !== currentSpouse.id);
           const partnerNode = partnerID ? nodeMap.get(partnerID) : null;
           if (partnerNode && partnerNode.id !== ipNode.id) extraPartners.push(partnerNode);
         });
-        const sp = splitSiblingsAround(spouseNode.id);
-        spouseBlock = [...insertSpouses(sp.older), spouseNode, ...insertSpouses(sp.younger)];
+        const sp = splitSiblingsAround(currentSpouse.id);
+        spouseOlderSiblings = insertSpouses(sp.older);
+        spouseYoungerSiblings = insertSpouses(sp.younger);
       }
-      const spouseHasSiblings = spouseBlock.length > 1;
 
-      if (ipSpouses.length <= 1 && spouseHasSiblings) {
-        // [표준] 배우자가 '자기 형제(가문)'를 가진 단혼:
-        // 두 가문을 나란히 배치해 각 형제군을 끊김 없이 연속시킨다.
-        // (IP-배우자 결혼선은 사이 형제들 위를 아래로 우회하여 표시됨)
-        // 좌→우: [IP 손위형제, IP, IP 손아래형제, 배우자 형제군 블록, (블렌디드)]
-        sortedGroup = [...ipOlderSiblings, ipNode, ...ipYoungerSiblings, ...spouseBlock, ...extraPartners];
-      } else {
-        // 배우자를 IP 옆에 (재혼: [전배우자들, IP, 최근배우자] / 단혼·형제없는 배우자: [IP, 배우자])
-        let ipCoupleOrdered: PersonNode[];
-        if (ipSpouses.length <= 1) {
-          ipCoupleOrdered = [ipNode, ...ipSpouses];
-        } else {
-          ipCoupleOrdered = [...ipSpouses.slice(0, -1), ipNode, ipSpouses[ipSpouses.length - 1]];
-        }
-        const ipCouple = Array.from(new Set<PersonNode>([...ipCoupleOrdered, ...extraPartners]));
-        const spouseSiblings = spouseNode ? spouseBlock.filter(n => n.id !== spouseNode.id) : [];
-        sortedGroup = [...ipOlderSiblings, ...ipCouple, ...ipYoungerSiblings, ...spouseSiblings];
-      }
+      /**
+       * [0세대 고정 순서] (C-2)
+       * IP형제(손위→손아래) → IP 전배우자들 → IP → 현재 배우자 → 배우자의 다른 파트너들 → 배우자 형제(출생순)
+       * '현재 배우자'는 가족 유닛 누락 등으로 ipSpouses에 없더라도 IP 오른쪽 자리에 방어적으로 삽입한다.
+       */
+      const pushedIds = new Set<string>();
+      sortedGroup = [];
+      const pushUnique = (n: PersonNode) => {
+        if (pushedIds.has(n.id)) return;
+        pushedIds.add(n.id);
+        sortedGroup.push(n);
+      };
+      [...ipOlderSiblings, ...ipYoungerSiblings, ...ipExSpouses, ipNode].forEach(pushUnique);
+      if (currentSpouse) pushUnique(currentSpouse);
+      [...extraPartners, ...spouseOlderSiblings, ...spouseYoungerSiblings].forEach(pushUnique);
+
+      // C-3에서 사용할 0세대 부부 집합/형제 존재 여부 기록
+      coupleIds = new Set<string>([
+        ipNode.id,
+        ...ipExSpouses.map(n => n.id),
+        ...(currentSpouse ? [currentSpouse.id] : []),
+        ...extraPartners.map(n => n.id),
+      ]);
+      hasGen0Siblings = ipOlderSiblings.length > 0 || ipYoungerSiblings.length > 0 ||
+        spouseOlderSiblings.length > 0 || spouseYoungerSiblings.length > 0;
+
       console.log("1. Gen 0 : sortedGroup = ",sortedGroup.map(n => n.name));
     } else if (level > 0) {
       /**
@@ -283,6 +306,44 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       }
     });
   });
+
+  // [C-3] subRow 계산: 세대 내 줄(0=형제자매 줄, 1=IP 부부 줄)을 파생한다.
+  // 멱등성 보장을 위해 항상 전체 노드를 subRow=0으로 초기화한 뒤 재계산한다.
+  nodes.forEach(n => { n.subRow = 0; });
+  if (hasGen0Siblings) {
+    nodes.forEach(n => {
+      if (n.relLevel === 0 && coupleIds.has(n.id)) n.subRow = 1;
+    });
+    const allLevels = Object.keys(levelGroups).map(Number);
+    const maxLevel = allLevels.length > 0 ? Math.max(...allLevels) : 0;
+    for (let lvl = 1; lvl <= maxLevel; lvl++) {
+      const levelNodes = nodes.filter(n => n.relLevel === lvl);
+      if (levelNodes.length === 0) continue;
+      // (1) 원가족 유닛(자기가 child로 속한 유닛)이 있는 노드: 그 유닛 부모들의 subRow 최댓값을 따른다.
+      levelNodes.forEach(node => {
+        const originUnit = familyUnits.find(fu => fu.childGroups?.some(cg => cg.child_ids.includes(node.id)));
+        if (!originUnit) return; // (2)에서 처리
+        const parentSubRows = originUnit.parent_ids
+          .map(pid => nodeMap.get(pid))
+          .filter((p): p is PersonNode => !!p)
+          .map(p => p.subRow ?? 0);
+        if (parentSubRows.length > 0) node.subRow = Math.max(...parentSubRows);
+      });
+      // (2) 원가족 유닛이 없는 노드(결혼해 들어온 배우자): 같은 유닛 상대 부모(파트너)의 subRow를 따른다.
+      // 반드시 (1)이 이 레벨의 원가족 자녀를 모두 확정한 뒤에 처리한다(파트너 먼저 확정).
+      levelNodes.forEach(node => {
+        const originUnit = familyUnits.find(fu => fu.childGroups?.some(cg => cg.child_ids.includes(node.id)));
+        if (originUnit) return; // (1)에서 이미 처리됨
+        const marriedUnit = familyUnits.find(fu => fu.parent_ids.includes(node.id));
+        if (!marriedUnit) return;
+        const partnerID = marriedUnit.parent_ids.find(pid => pid !== node.id);
+        const partnerNode = partnerID ? nodeMap.get(partnerID) : null;
+        if (partnerNode) node.subRow = partnerNode.subRow ?? 0;
+      });
+    }
+    // relLevel < 0(원가족 윗 세대)은 항상 subRow=0 유지
+    nodes.forEach(n => { if (n.relLevel < 0) n.subRow = 0; });
+  }
 
   // [#8] 미배치 노드 fallback: 어느 버킷에도 잡히지 않아 display_order가 -1로 남은
   // 노드를 같은 세대의 끝에 순차 배치하여 -1끼리 겹치지 않도록 한다.

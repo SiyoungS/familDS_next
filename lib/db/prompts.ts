@@ -1,7 +1,7 @@
 import clientPromise from '../mongodb';
 import { DB_NAME, PROMPTS_COLLECTION } from '../auth/config';
 
-export type PromptKey = 'contents' | 'interface' | 'relations';
+export type PromptKey = 'contents' | 'interface' | 'relations' | 'emotions';
 
 // 문서 스키마: { key: PromptKey, text: string, updatedAt: Date }
 

@@ -7,6 +7,8 @@ import { CallOpenAI } from './openai-route';
 import { ApiMode } from '@/types/api-loaders.type';
 import { CallGemini } from './genai-route';
 import { CallGeminiRelations, type FamilyRelation } from './genai-relations';
+import { CallGeminiEmotions } from './genai-emotions';
+import { applyEmotions } from './apply-emotions';
 
 // getSession은 next/headers의 cookies를 사용하므로 Node.js 런타임 필요
 export const runtime = 'nodejs';
@@ -40,6 +42,13 @@ function applyRelations(data: any, relations: FamilyRelation[]) {
     if (r.divorce_year != null) u.divorce_year = r.divorce_year;
     if (r.reunion_year != null) u.reunion_year = r.reunion_year;
   });
+}
+
+// 확정된 인물 목록을 'id: 이름' 요약 문자열로 (정서 관계선 추출 호출의 입력)
+function buildNodeSummary(data: any): string {
+  return (data.nodes || [])
+    .map((n: any) => `${n.id}: ${n.name}`)
+    .join('\n');
 }
 
 export async function POST(req: Request) {
@@ -92,6 +101,19 @@ export async function POST(req: Request) {
       }
     } catch (relErr) {
       console.error("Relations chaining failed (fallback to structure legal_status):", relErr);
+    }
+
+    // [프롬프트 체이닝 2차] 확정된 인물 목록으로 정서 관계선(emotional_status)만 전담 추출 → union 병합.
+    // 실패해도 1차 구조의 links 그대로 폴백(전체 실패로 만들지 않음).
+    try {
+      if (selectAPI === "gemini" && rawData?.nodes?.length) {
+        const nodeSummary = buildNodeSummary(rawData);
+        const emotionalLinks = await CallGeminiEmotions({ counselText, nodeSummary });
+        applyEmotions(rawData, emotionalLinks);
+        console.log(`Emotions merged: ${emotionalLinks.length} extracted`);
+      }
+    } catch (emoErr) {
+      console.error("Emotions chaining failed (fallback to structure links):", emoErr);
     }
 
     const processedData = processGenogramData(rawData);
