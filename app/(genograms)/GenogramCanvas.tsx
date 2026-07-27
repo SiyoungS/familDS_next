@@ -5,7 +5,7 @@ import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
 import { resolveAnonymousNames, removeNodesFromData } from '@/lib/genograms/bowen/prune-anonymous';
 import { arcPath, arcZigzag, emotionalBow, edgeEndpoints, arcControl, axis } from '@/lib/genograms/bowen/edge-geometry';
 import type { GeoNode } from '@/lib/genograms/bowen/edge-geometry';
-import { BWGenogramData, PersonNode, ChildGroup } from '@/types/bowengenogram.types';
+import { BWGenogramData, PersonNode, ChildGroup, RelationshipLink, HouseholdGroup } from '@/types/bowengenogram.types';
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
 import { ZoomIn, ZoomOut, Printer, Maximize, Frame, Scaling, Plus, Minus, HelpCircle, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
 
@@ -174,6 +174,65 @@ function roundedPolygonPath(points: { x: number; y: number }[], radius: number):
   return segs.join(' ');
 }
 
+// 범례(renderLegend)와 표시 옵션 팝오버의 [관계선] 탭이 공유하는 정서선 유형 순서/한국어 라벨.
+// 동거가족 라벨도 함께 상수화해 두 곳에서 문자열이 어긋나지 않게 한다.
+const EMOTION_TYPES: { key: string; label: string }[] = [
+  { key: 'close', label: '친밀' },
+  { key: 'fused', label: '밀착' },
+  { key: 'distant', label: '소원' },
+  { key: 'conflictual', label: '갈등' },
+  { key: 'fused_conflictual', label: '밀착된 갈등' },
+  { key: 'cut_off', label: '단절' },
+  { key: 'hostile', label: '적대' },
+];
+const HOUSEHOLD_LABEL = '동거가족';
+
+// 정서 관계선 표시 판정 규칙(쌍 중복 제거 시 첫 등장만 유지, normal/triangle 제외, 좌표 없는
+// 노드 제외)을 renderEmotionalLinks·renderLegend·표시 옵션의 [관계선] 탭이 공유하는 순수 헬퍼.
+// 세 곳이 각자 이 규칙을 다시 구현하면 범례/탭이 실제 화면과 어긋날 수 있어 반드시 여기만 거친다.
+// (표시 오버레이 설계: 이 함수는 "화면에 그려질 수 있는 링크"만 추리며, 사용자가 껐는지 여부는
+// 별도의 hiddenLinkIds Set으로 판단한다 — 원본 데이터는 절대 건드리지 않는다.)
+function getVisibleLinks(
+  links: RelationshipLink[],
+  nodePositions: Record<string, { x: number; y: number }>
+): RelationshipLink[] {
+  const seen = new Set<string>();
+  const result: RelationshipLink[] = [];
+  links.forEach((link) => {
+    const dedupeKey = [link.from, link.to].sort().join('|');
+    if (seen.has(dedupeKey)) return; // 첫 등장만 유지
+    seen.add(dedupeKey);
+    const status = link.emotional_status;
+    if (status === 'normal' || status === 'triangle') return; // 그리지 않는 유형
+    if (!nodePositions[link.from] || !nodePositions[link.to]) return; // 좌표 없으면 제외
+    result.push(link);
+  });
+  return result;
+}
+
+// IP(내담자) 가족 동거가족 판정 규칙(renderHouseholds와 동일)을 공유하는 순수 헬퍼.
+// id는 h.id가 없을 때 households 배열의 원본 인덱스로 폴백 — renderHouseholds의 key,
+// 표시 옵션의 [관계선] 탭 항목, hiddenHouseholdIds 키가 모두 이 id로 1:1 대응한다.
+function getVisibleHouseholds(
+  households: HouseholdGroup[],
+  nodes: PersonNode[],
+  nodePositions: Record<string, { x: number; y: number }>
+): { household: HouseholdGroup; id: string; memberIds: string[] }[] {
+  const ip = nodes.find((n) => n.attributes?.is_ip);
+  if (!ip) return [];
+  return households
+    .map((h, idx) => {
+      const memberIds = h.member_ids ?? h.members ?? [];
+      // IP(내담자) 가족만 표시 — 그 외 동거가족은 추후 다른 인물 기준 표시 기능에서 다룰 예정
+      if (!memberIds.includes(ip.id)) return null;
+      // 좌표 있는 구성원만 남김(친정 부모 필터 등으로 제거된 구성원은 좌표가 없음)
+      const withPos = memberIds.filter((id) => !!nodePositions[id]);
+      if (withPos.length < 1) return null;
+      return { household: h, id: h.id ?? String(idx), memberIds: withPos };
+    })
+    .filter((x): x is { household: HouseholdGroup; id: string; memberIds: string[] } => !!x);
+}
+
 export default function GenogramCanvas({ data: initialData }: Props) {
   // 친정 부모(배우자 측) 표시 — 기본 OFF(생략). IP에게 배우자가 없으면 토글은 무의미.
   const [showSpouseFamily, setShowSpouseFamily] = useState(false);
@@ -187,6 +246,54 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   const [ageMode, setAgeMode] = useState<AgeMode>('actual');
   // 표시 옵션 팝오버
   const [optionsOpen, setOptionsOpen] = useState(false);
+  // 표시 옵션 팝오버 내부 탭: [표시](기존) / [관계선](신규 — 유형별 on/off)
+  const [optionsTab, setOptionsTab] = useState<'display' | 'relations'>('display');
+
+  // 표시 오버레이 설계(향후 편집 기능 대비): 관계선/동거가족의 "보임 여부"는 원본 데이터(links,
+  // households)와 분리된 별도 상태로만 관리한다. key는 안정적인 id(link.id / household.id ?? 배열
+  // 인덱스)를 쓰므로, 나중에 노드·가족선·관계선을 직접 추가·삭제하는 편집 기능이 붙어도 이 Set만
+  // 갱신하면 되고 데이터 변환 로직을 건드릴 필요가 없다.
+  const [hiddenLinkIds, setHiddenLinkIds] = useState<Set<string>>(new Set());
+  const [hiddenHouseholdIds, setHiddenHouseholdIds] = useState<Set<string>>(new Set());
+
+  // 다른 가계도 데이터로 바뀌면 이전 데이터의 id 기준 숨김 상태가 잔존하지 않도록 초기화.
+  // useEffect 대신 "prop이 바뀌면 렌더링 중 상태를 조정" 패턴 사용(React 공식 권장) —
+  // effect 안에서 setState를 호출하면 캐스케이드 렌더링 린트 경고가 발생하므로 회피.
+  const [prevInitialData, setPrevInitialData] = useState(initialData);
+  if (prevInitialData !== initialData) {
+    setPrevInitialData(initialData);
+    setHiddenLinkIds(new Set());
+    setHiddenHouseholdIds(new Set());
+  }
+
+  const toggleLinkVisibility = useCallback((id: string) => {
+    setHiddenLinkIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const toggleHouseholdVisibility = useCallback((id: string) => {
+    setHiddenHouseholdIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }, []);
+  const setLinksHidden = useCallback((ids: string[], hidden: boolean) => {
+    setHiddenLinkIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (hidden ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }, []);
+  const setHouseholdsHidden = useCallback((ids: string[], hidden: boolean) => {
+    setHiddenHouseholdIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => (hidden ? next.add(id) : next.delete(id)));
+      return next;
+    });
+  }, []);
 
   const hasSpouse = useMemo(() => !!findCurrentSpouse(initialData), [initialData]);
 
@@ -445,6 +552,41 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     });
     return pos;
   }, [processedData]);
+
+  // 표시 옵션의 [관계선] 탭에 뿌릴 목록 — renderEmotionalLinks/renderHouseholds와 동일한
+  // getVisibleLinks/getVisibleHouseholds 규칙으로 "화면에 그려질 수 있는" 항목만 추린 뒤
+  // 유형별로 그룹화하는 순수 계산. 가시성 오버레이(hiddenLinkIds 등) 자체는 포함하지 않는다 —
+  // 여기서 만드는 것은 어디까지나 "무엇을 보여줄 수 있는가" 목록이고, "지금 보이는가"는 탭 렌더링
+  // 쪽에서 hiddenLinkIds/hiddenHouseholdIds와 조합해 판단한다. 이렇게 분리해 두면 나중에 노드·
+  // 관계선 편집 UI가 같은 목록 구조를 그대로 재사용할 수 있다.
+  const visibleRelations = useMemo(() => {
+    const nameOf = (id: string): string => {
+      const node = processedData.nodes.find((n) => n.id === id);
+      return node?.name?.trim() ? node.name : '이름 미상';
+    };
+
+    const links = getVisibleLinks(processedData.links ?? [], nodePositions).map((link) => ({
+      id: link.id,
+      status: link.emotional_status,
+      fromName: nameOf(link.from),
+      toName: nameOf(link.to),
+    }));
+
+    const groups = EMOTION_TYPES.map((t) => ({
+      key: t.key,
+      label: t.label,
+      items: links.filter((l) => l.status === t.key),
+    })).filter((g) => g.items.length > 0);
+
+    const households = getVisibleHouseholds(processedData.households ?? [], processedData.nodes, nodePositions).map(
+      ({ household: h, id, memberIds }) => ({
+        id,
+        label: h.label || memberIds.map(nameOf).join(', '),
+      })
+    );
+
+    return { groups, households };
+  }, [processedData, nodePositions]);
 
   // 관계선 (부부선, 이혼선, 자녀 ㄷ자선) 렌더링 함수
   const renderRelationships = () => {
@@ -709,19 +851,13 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   // → 비구성원 노드가 경계에 갇히지 않도록 세대(줄)별 폭에 맞춘 계단형 외곽선(단일 닫힌 path)을 그린다.
   const renderHouseholds = (): React.JSX.Element[] => {
     const elements: React.JSX.Element[] = [];
-    const households = processedData.households ?? [];
-    const ip = processedData.nodes.find((n) => n.attributes?.is_ip);
-    households.forEach((h, idx) => {
-      const memberIds = h.member_ids ?? h.members ?? [];
-      // IP(내담자) 가족만 표시 — 그 외 동거가족은 추후 다른 인물 기준 표시 기능에서 다룰 예정
-      if (!ip || !memberIds.includes(ip.id)) return;
-      // 구성원별 좌표 수집 — 좌표가 없으면 해당 구성원 스킵
+    const visibleHouseholds = getVisibleHouseholds(processedData.households ?? [], processedData.nodes, nodePositions);
+    visibleHouseholds.forEach(({ household: h, id, memberIds }) => {
+      // 표시 오버레이: 표시 옵션의 [관계선] 탭에서 숨김 처리된 동거가족은 그리지 않음(원본 데이터는 그대로)
+      if (hiddenHouseholdIds.has(id)) return;
+      // 구성원별 좌표 수집(getVisibleHouseholds가 이미 좌표 있는 구성원만 남겨 둠)
       const members = memberIds
-        .map((id) => {
-          const node = processedData.nodes.find((n) => n.id === id);
-          const pos = nodePositions[id];
-          return node && pos ? { x: pos.x, y: pos.y } : null;
-        })
+        .map((mid) => nodePositions[mid])
         .filter((m): m is { x: number; y: number } => !!m);
       if (members.length < 1) return;
 
@@ -769,7 +905,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
 
       elements.push(
         <path
-          key={`hh-${h.id ?? idx}`}
+          key={`hh-${id}`}
           // '소원' 정서선(#94a3b8, 5 5 점선)과 구분: 진한 색 + 큰 라운드 코너 + 촘촘한 dot 패턴.
           d={roundedPolygonPath(pts, 36)}
           fill="none"
@@ -785,7 +921,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
       if (h.label) {
         elements.push(
           <text
-            key={`hh-label-${h.id ?? idx}`}
+            key={`hh-label-${id}`}
             x={rows[0].left + 8}
             y={rows[0].top - 6}
             fontSize={11}
@@ -803,8 +939,8 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   // 정서 관계선 오버레이 — 최상위(구조 위)
   const renderEmotionalLinks = (): React.JSX.Element[] => {
     const elements: React.JSX.Element[] = [];
-    const links = processedData.links ?? [];
-    const seen = new Set<string>();
+    // 중복 제거·스킵 규칙은 getVisibleLinks(모듈 스코프 공용 헬퍼)로 일원화 — 범례/관계선 탭과 항상 동일
+    const links = getVisibleLinks(processedData.links ?? [], nodePositions);
     // 회피 곡률 계산용 전체 노드 GeoNode
     const allNodes: GeoNode[] = processedData.nodes.map((n) => ({
       x: n.layoutPosition.x,
@@ -813,16 +949,12 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     }));
 
     links.forEach((link, idx) => {
-      const dedupeKey = [link.from, link.to].sort().join('|');
-      if (seen.has(dedupeKey)) return; // 첫 등장만 유지
-      seen.add(dedupeKey);
+      // 표시 오버레이: 표시 옵션의 [관계선] 탭에서 숨김 처리된 관계선은 그리지 않음(원본 데이터는 그대로)
+      if (hiddenLinkIds.has(link.id)) return;
 
       const status = link.emotional_status;
-      if (status === 'normal' || status === 'triangle') return; // 그리지 않음
-
       const fromPos = nodePositions[link.from];
       const toPos = nodePositions[link.to];
-      if (!fromPos || !toPos) return; // 좌표 없으면 스킵
 
       const fromNode = processedData.nodes.find((n) => n.id === link.from);
       const toNode = processedData.nodes.find((n) => n.id === link.to);
@@ -898,35 +1030,19 @@ export default function GenogramCanvas({ data: initialData }: Props) {
 
   // 범례 — 사용된 정서선 유형/동거가족 유무에 따라 좌상단에 표시 (인쇄 포함)
   const renderLegend = (): React.JSX.Element | null => {
-    const links = processedData.links ?? [];
-    const seen = new Set<string>();
-    const used = new Set<string>();
-    links.forEach((link) => {
-      const dedupeKey = [link.from, link.to].sort().join('|');
-      if (seen.has(dedupeKey)) return;
-      seen.add(dedupeKey);
-      const s = link.emotional_status;
-      if (s === 'normal' || s === 'triangle') return;
-      if (!nodePositions[link.from] || !nodePositions[link.to]) return;
-      used.add(s);
-    });
-    const hasHouseholds = (processedData.households ?? []).some((h) => {
-      const memberIds = h.member_ids ?? h.members ?? [];
-      return memberIds.filter((id) => nodePositions[id]).length >= 1;
-    });
+    // getVisibleLinks/getVisibleHouseholds(모듈 스코프 공용 헬퍼)로 판정 규칙을 일원화하고,
+    // 표시 옵션의 [관계선] 탭에서 숨김 처리된 항목도 제외해 범례가 실제 화면과 항상 일치하게 한다.
+    const used = new Set<string>(
+      getVisibleLinks(processedData.links ?? [], nodePositions)
+        .filter((link) => !hiddenLinkIds.has(link.id))
+        .map((link) => link.emotional_status)
+    );
+    const hasHouseholds = getVisibleHouseholds(processedData.households ?? [], processedData.nodes, nodePositions)
+      .some((h) => !hiddenHouseholdIds.has(h.id));
     if (used.size === 0 && !hasHouseholds) return null;
 
-    const ORDER: { key: string; label: string }[] = [
-      { key: 'close', label: '친밀' },
-      { key: 'fused', label: '밀착' },
-      { key: 'distant', label: '소원' },
-      { key: 'conflictual', label: '갈등' },
-      { key: 'fused_conflictual', label: '밀착된 갈등' },
-      { key: 'cut_off', label: '단절' },
-      { key: 'hostile', label: '적대' },
-    ];
-    const rows = ORDER.filter((r) => used.has(r.key));
-    if (hasHouseholds) rows.push({ key: 'household', label: '동거가족' });
+    const rows = EMOTION_TYPES.filter((r) => used.has(r.key));
+    if (hasHouseholds) rows.push({ key: 'household', label: HOUSEHOLD_LABEL });
 
     const x0 = 16;
     const y0 = 16;
@@ -1296,7 +1412,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
             className="absolute inset-0 z-30 bg-black/50"
             onClick={() => setOptionsOpen(false)}
           />
-          <div className="absolute bottom-16 right-3 z-40 w-[300px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
+          <div className="absolute bottom-16 right-3 z-40 w-[320px] max-w-[calc(100%-1.5rem)] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl">
             <div className="mb-3 flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
                 <SlidersHorizontal size={18} />
@@ -1311,6 +1427,29 @@ export default function GenogramCanvas({ data: initialData }: Props) {
               </button>
             </div>
 
+            {/* 탭: [표시](기존 옵션) / [관계선](유형별 개별·그룹 on/off, 신규) */}
+            <div className="mb-3 flex gap-1 rounded-lg bg-slate-100 p-1">
+              <button
+                type="button"
+                onClick={() => setOptionsTab('display')}
+                className={`flex-1 rounded-md px-2 py-1 text-xs font-semibold transition ${
+                  optionsTab === 'display' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                표시
+              </button>
+              <button
+                type="button"
+                onClick={() => setOptionsTab('relations')}
+                className={`flex-1 rounded-md px-2 py-1 text-xs font-semibold transition ${
+                  optionsTab === 'relations' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                관계선
+              </button>
+            </div>
+
+            {optionsTab === 'display' && (
             <div className="space-y-3">
               {/* 인물 텍스트(이름·나이) 표시 — 기본 OFF. 아래 세 항목은 이 옵션의 하위(포함) 옵션 */}
               <label className="flex cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-slate-700">
@@ -1410,6 +1549,85 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                 />
               </label>
             </div>
+            )}
+
+            {optionsTab === 'relations' && (
+              <div className="max-h-[320px] space-y-4 overflow-y-auto pr-1">
+                {visibleRelations.groups.length === 0 && visibleRelations.households.length === 0 ? (
+                  <p className="text-xs text-slate-400">표시할 관계선이 없습니다.</p>
+                ) : (
+                  <>
+                    {visibleRelations.groups.map((group) => {
+                      const allVisible = group.items.every((item) => !hiddenLinkIds.has(item.id));
+                      return (
+                        <div key={group.key} className="space-y-1.5">
+                          <label className="flex cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-slate-700">
+                            <span>
+                              {group.label}{' '}
+                              <span className="font-normal text-slate-400">({group.items.length})</span>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={allVisible}
+                              onChange={() => setLinksHidden(group.items.map((item) => item.id), allVisible)}
+                              className="h-4 w-4 accent-blue-600"
+                            />
+                          </label>
+                          <div className="ml-3 space-y-1 border-l-2 border-slate-100 pl-3">
+                            {group.items.map((item) => (
+                              <label key={item.id} className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                                <input
+                                  type="checkbox"
+                                  checked={!hiddenLinkIds.has(item.id)}
+                                  onChange={() => toggleLinkVisibility(item.id)}
+                                  className="h-4 w-4 shrink-0 accent-blue-600"
+                                />
+                                <span className="truncate">{item.fromName} ↔ {item.toName}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {visibleRelations.households.length > 0 && (() => {
+                      const allHouseholdsVisible = visibleRelations.households.every((h) => !hiddenHouseholdIds.has(h.id));
+                      return (
+                        <div className="space-y-1.5">
+                          <label className="flex cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-slate-700">
+                            <span>
+                              {HOUSEHOLD_LABEL}{' '}
+                              <span className="font-normal text-slate-400">({visibleRelations.households.length})</span>
+                            </span>
+                            <input
+                              type="checkbox"
+                              checked={allHouseholdsVisible}
+                              onChange={() =>
+                                setHouseholdsHidden(visibleRelations.households.map((h) => h.id), allHouseholdsVisible)
+                              }
+                              className="h-4 w-4 accent-blue-600"
+                            />
+                          </label>
+                          <div className="ml-3 space-y-1 border-l-2 border-slate-100 pl-3">
+                            {visibleRelations.households.map((h) => (
+                              <label key={h.id} className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
+                                <input
+                                  type="checkbox"
+                                  checked={!hiddenHouseholdIds.has(h.id)}
+                                  onChange={() => toggleHouseholdVisibility(h.id)}
+                                  className="h-4 w-4 shrink-0 accent-blue-600"
+                                />
+                                <span className="truncate">{h.label}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
