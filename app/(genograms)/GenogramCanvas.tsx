@@ -7,7 +7,7 @@ import { arcPath, arcZigzag, emotionalBow, edgeEndpoints, arcControl, axis } fro
 import type { GeoNode } from '@/lib/genograms/bowen/edge-geometry';
 import { BWGenogramData, PersonNode, ChildGroup, RelationshipLink, HouseholdGroup } from '@/types/bowengenogram.types';
 import React, { useMemo, useRef, useState, useCallback, useEffect } from 'react';
-import { ZoomIn, ZoomOut, Printer, Maximize, Frame, Scaling, Plus, Minus, HelpCircle, ChevronLeft, ChevronRight, SlidersHorizontal } from 'lucide-react';
+import { ZoomIn, ZoomOut, Printer, Maximize, Frame, Scaling, Plus, Minus, HelpCircle, ChevronLeft, ChevronRight, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
 interface Props { data: BWGenogramData; }
 
@@ -174,18 +174,30 @@ function roundedPolygonPath(points: { x: number; y: number }[], radius: number):
   return segs.join(' ');
 }
 
-// 범례(renderLegend)와 표시 옵션 팝오버의 [관계선] 탭이 공유하는 정서선 유형 순서/한국어 라벨.
-// 동거가족 라벨도 함께 상수화해 두 곳에서 문자열이 어긋나지 않게 한다.
-const EMOTION_TYPES: { key: string; label: string }[] = [
-  { key: 'close', label: '친밀' },
-  { key: 'fused', label: '밀착' },
-  { key: 'distant', label: '소원' },
-  { key: 'conflictual', label: '갈등' },
-  { key: 'fused_conflictual', label: '밀착된 갈등' },
-  { key: 'cut_off', label: '단절' },
-  { key: 'hostile', label: '적대' },
+// 범례(renderLegend)와 표시 옵션 팝오버의 [관계선] 탭이 공유하는 정서선 유형 순서/한국어 라벨/기본 농도.
+// 동거가족 라벨·기본 농도도 함께 상수화해 두 곳에서 값이 어긋나지 않게 한다.
+// defaultOpacity를 라벨 옆에 두는 이유: 유형이 추가되면 렌더·농도 슬라이더가 자동으로 따라온다.
+const EMOTION_TYPES: { key: string; label: string; defaultOpacity: number }[] = [
+  { key: 'close', label: '친밀', defaultOpacity: 0.3 },
+  { key: 'fused', label: '밀착', defaultOpacity: 0.3 },
+  { key: 'distant', label: '소원', defaultOpacity: 0.3 },
+  { key: 'conflictual', label: '갈등', defaultOpacity: 0.3 },
+  { key: 'fused_conflictual', label: '밀착된 갈등', defaultOpacity: 0.3 },
+  { key: 'cut_off', label: '단절', defaultOpacity: 0.3 },
+  { key: 'hostile', label: '적대', defaultOpacity: 0.3 },
 ];
 const HOUSEHOLD_LABEL = '동거가족';
+// 동거가족 경계는 정서선이 아니라 배경 레이어라 기본은 불투명(1) — 슬라이더로만 낮춘다.
+const HOUSEHOLD_DEFAULT_OPACITY = 1;
+
+// 유형 키 → 농도 초기값. EMOTION_TYPES에서 파생하므로 유형 추가 시 여기는 고칠 필요가 없다.
+const DEFAULT_LINK_OPACITY: Record<string, number> = Object.fromEntries(
+  EMOTION_TYPES.map((t) => [t.key, t.defaultOpacity])
+);
+// 유형 키 → 인쇄/PDF 적용 여부 초기값. 기본은 "화면에서 조절한 농도를 인쇄본에도 그대로 반영".
+const DEFAULT_PRINT_APPLY: Record<string, boolean> = Object.fromEntries(
+  EMOTION_TYPES.map((t) => [t.key, true])
+);
 
 // 정서 관계선 표시 판정 규칙(쌍 중복 제거 시 첫 등장만 유지, normal/triangle 제외, 좌표 없는
 // 노드 제외)을 renderEmotionalLinks·renderLegend·표시 옵션의 [관계선] 탭이 공유하는 순수 헬퍼.
@@ -233,6 +245,69 @@ function getVisibleHouseholds(
     .filter((x): x is { household: HouseholdGroup; id: string; memberIds: string[] } => !!x);
 }
 
+// 표시 옵션 [관계선] 탭의 농도 조절 줄 — 정서선 유형 그룹과 동거가족 그룹이 같은 UI를 공유한다.
+// 슬라이더 + 현재값 + [초기화] + [인쇄 적용] 토글이 한 줄. 두 버튼은 아이콘만 두고 의미는
+// title/aria-label로 전달한다(팝오버 폭 320px 안에서 슬라이더 길이를 최대한 확보하기 위함).
+function OpacityRow({
+  value,
+  defaultValue,
+  printApply,
+  onChange,
+  onReset,
+  onTogglePrint,
+}: {
+  value: number;
+  defaultValue: number;
+  printApply: boolean;
+  onChange: (v: number) => void;
+  onReset: () => void;
+  onTogglePrint: () => void;
+}) {
+  // step이 0.05라 부동소수 오차가 남을 수 있어 근사 비교로 "기본값과 같은지"를 판정한다.
+  const isDefault = Math.abs(value - defaultValue) < 0.001;
+  return (
+    <div className="ml-3 flex items-center gap-1.5 border-l-2 border-slate-100 pl-3">
+      <span className="shrink-0 text-[11px] font-semibold text-slate-500">농도</span>
+      <input
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="h-1 min-w-0 flex-1 cursor-pointer accent-blue-600"
+      />
+      <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-slate-400">
+        {Math.round(value * 100)}%
+      </span>
+      {/* 이 항목만 기본 농도로 되돌리기 — 이미 기본값이면 누를 것이 없으므로 비활성 */}
+      <button
+        type="button"
+        onClick={onReset}
+        disabled={isDefault}
+        title={`초기화 (${Math.round(defaultValue * 100)}%)`}
+        aria-label="농도 초기화"
+        className="shrink-0 rounded p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:pointer-events-none disabled:opacity-25"
+      >
+        <RotateCcw size={13} />
+      </button>
+      {/* 인쇄/PDF 적용 토글 — OFF면 화면은 그대로 두고 인쇄본만 기본 농도로 출력한다 */}
+      <button
+        type="button"
+        onClick={onTogglePrint}
+        title={printApply ? '인쇄/PDF에 적용함 (누르면 해제)' : '인쇄/PDF에 적용 안 함 (기본 농도로 출력)'}
+        aria-label="인쇄/PDF 적용"
+        aria-pressed={printApply}
+        className={`shrink-0 rounded p-1 transition hover:bg-slate-100 ${
+          printApply ? 'text-blue-600' : 'text-slate-300'
+        }`}
+      >
+        <Printer size={13} />
+      </button>
+    </div>
+  );
+}
+
 export default function GenogramCanvas({ data: initialData }: Props) {
   // 친정 부모(배우자 측) 표시 — 기본 OFF(생략). IP에게 배우자가 없으면 토글은 무의미.
   const [showSpouseFamily, setShowSpouseFamily] = useState(false);
@@ -255,6 +330,19 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   // 갱신하면 되고 데이터 변환 로직을 건드릴 필요가 없다.
   const [hiddenLinkIds, setHiddenLinkIds] = useState<Set<string>>(new Set());
   const [hiddenHouseholdIds, setHiddenHouseholdIds] = useState<Set<string>>(new Set());
+
+  // 농도(투명도) 오버레이 — 위 숨김 Set과 같은 "원본 데이터를 건드리지 않는 표시 레이어"지만 키 공간이
+  // 다르다: hidden*는 개별 항목 id, 이쪽은 정서선 '유형' 키(조절 단위가 유형별이라서). 동거가족은
+  // 유형이 하나뿐이라 단일 숫자로 둔다. 유형 키는 데이터가 바뀌어도 낡지 않으므로 아래 데이터 변경
+  // 초기화 대상에서 제외한다 — 다른 가계도로 넘어가도 사용자가 맞춘 농도가 그대로 유지된다.
+  const [linkOpacityByType, setLinkOpacityByType] = useState<Record<string, number>>(DEFAULT_LINK_OPACITY);
+  const [householdOpacity, setHouseholdOpacity] = useState<number>(HOUSEHOLD_DEFAULT_OPACITY);
+
+  // 인쇄/PDF 적용 여부 — 항목별로 "화면에서 조절한 농도를 인쇄본에도 반영할지"를 고른다. OFF면
+  // 화면은 그대로 두고 인쇄본만 기본 농도로 나간다(구현: 각 요소에 data-print-opacity를 심어
+  // handlePrint의 clone 단계에서 opacity로 덮어쓴다 — 화면 DOM은 건드리지 않는다).
+  const [printApplyByType, setPrintApplyByType] = useState<Record<string, boolean>>(DEFAULT_PRINT_APPLY);
+  const [householdPrintApply, setHouseholdPrintApply] = useState(true);
 
   // 다른 가계도 데이터로 바뀌면 이전 데이터의 id 기준 숨김 상태가 잔존하지 않도록 초기화.
   // useEffect 대신 "prop이 바뀌면 렌더링 중 상태를 조정" 패턴 사용(React 공식 권장) —
@@ -293,6 +381,16 @@ export default function GenogramCanvas({ data: initialData }: Props) {
       ids.forEach((id) => (hidden ? next.add(id) : next.delete(id)));
       return next;
     });
+  }, []);
+  const setTypeOpacity = useCallback((key: string, value: number) => {
+    setLinkOpacityByType((prev) => ({ ...prev, [key]: value }));
+  }, []);
+  // 해당 항목 하나만 기본 농도로 복귀 (다른 유형·다른 설정은 그대로)
+  const resetTypeOpacity = useCallback((key: string) => {
+    setLinkOpacityByType((prev) => ({ ...prev, [key]: DEFAULT_LINK_OPACITY[key] ?? 1 }));
+  }, []);
+  const togglePrintApply = useCallback((key: string) => {
+    setPrintApplyByType((prev) => ({ ...prev, [key]: !(prev[key] ?? true) }));
   }, []);
 
   const hasSpouse = useMemo(() => !!findCurrentSpouse(initialData), [initialData]);
@@ -415,6 +513,17 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     const clone = svg.cloneNode(true) as SVGSVGElement;
     // 가이드라인 등 화면 전용 요소는 인쇄본에서 제거
     clone.querySelectorAll('.print-hide').forEach((el) => el.remove());
+    // 표시 옵션 [관계선] 탭의 [인쇄 적용] 토글 반영: 각 요소가 들고 있는 data-print-opacity를
+    // 인쇄본의 opacity로 확정한다. 토글 ON이면 화면 농도와 같은 값, OFF면 기본 농도가 들어 있다.
+    // 화면 DOM이 아니라 clone에만 적용하므로 인쇄 창을 열어도 화면 표시는 변하지 않는다.
+    clone.querySelectorAll('[data-print-opacity]').forEach((el) => {
+      const v = el.getAttribute('data-print-opacity');
+      el.removeAttribute('data-print-opacity');
+      if (v === null) return;
+      // 인쇄본에서 완전 투명한 요소는 마크업에서 아예 뺀다(불필요한 노드 제거)
+      if (Number(v) <= 0) el.remove();
+      else el.setAttribute('opacity', v);
+    });
     // 내부 마크업만 추출 → 인쇄 창에서 페이지별 SVG(viewBox 로 영역 잘라내기)에 재사용
     const innerMarkup = Array.from(clone.childNodes)
       .map((n) => new XMLSerializer().serializeToString(n))
@@ -852,6 +961,8 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   const renderHouseholds = (): React.JSX.Element[] => {
     const elements: React.JSX.Element[] = [];
     const visibleHouseholds = getVisibleHouseholds(processedData.households ?? [], processedData.nodes, nodePositions);
+    // 인쇄본 농도 — [인쇄 적용] OFF면 인쇄본만 기본 농도(불투명)로 되돌린다(정서선과 동일한 방식).
+    const printOpacity = householdPrintApply ? householdOpacity : HOUSEHOLD_DEFAULT_OPACITY;
     visibleHouseholds.forEach(({ household: h, id, memberIds }) => {
       // 표시 오버레이: 표시 옵션의 [관계선] 탭에서 숨김 처리된 동거가족은 그리지 않음(원본 데이터는 그대로)
       if (hiddenHouseholdIds.has(id)) return;
@@ -916,6 +1027,9 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           strokeDasharray="0.5 6"
           strokeLinecap="round"
           strokeLinejoin="round"
+          // 표시 옵션 [관계선] 탭의 동거가족 농도 슬라이더 (아래 라벨에도 같은 값을 적용)
+          opacity={householdOpacity}
+          data-print-opacity={printOpacity}
         />
       );
       if (h.label) {
@@ -927,6 +1041,8 @@ export default function GenogramCanvas({ data: initialData }: Props) {
             fontSize={11}
             fontWeight={600}
             fill="#475569"
+            opacity={householdOpacity}
+            data-print-opacity={printOpacity}
           >
             {h.label}
           </text>
@@ -965,47 +1081,55 @@ export default function GenogramCanvas({ data: initialData }: Props) {
 
       const bow = emotionalBow(fromGeo, toGeo, allNodes);
       const { x1, y1, x2, y2 } = edgeEndpoints(fromGeo, toGeo);
-
+      // 유형별 농도(표시 옵션 [관계선] 탭의 슬라이더). path마다 opacity를 주면 겹치는 획의 교차점만
+      // 진해지므로(0.3 두 겹 = 0.51) 한 링크의 모든 path를 <g opacity>로 묶어 한 겹으로 합성한다.
+      // 밀착(3중 호)·밀착된 갈등(호를 가로지르는 지그재그)·단절(호를 관통하는 막대)에서 차이가 크다.
+      const opacity = linkOpacityByType[status] ?? 1;
+      // 인쇄본 농도 — [인쇄 적용] 토글이 OFF면 조절값 대신 기본 농도로 되돌린다.
+      // handlePrint의 clone에서만 opacity로 덮어쓰므로 화면 표시에는 영향이 없다.
+      const printOpacity = (printApplyByType[status] ?? true) ? opacity : (DEFAULT_LINK_OPACITY[status] ?? 1);
+      // 링크 하나가 만드는 path 묶음. key는 <g> 안에서만 유일하면 되므로 짧게 쓴다.
+      const parts: React.JSX.Element[] = [];
       switch (status) {
         case 'close': // 친밀: 이중 평행 호
-          elements.push(
-            <path key={`emo-${idx}-a`} d={arcPath(x1, y1, x2, y2, bow, 2.5)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-b`} d={arcPath(x1, y1, x2, y2, bow, -2.5)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />
+          parts.push(
+            <path key="a" d={arcPath(x1, y1, x2, y2, bow, 2.5)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="b" d={arcPath(x1, y1, x2, y2, bow, -2.5)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />
           );
           break;
         case 'fused': // 밀착: 삼중 평행 호
-          elements.push(
-            <path key={`emo-${idx}-a`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-b`} d={arcPath(x1, y1, x2, y2, bow, 4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-c`} d={arcPath(x1, y1, x2, y2, bow, -4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />
+          parts.push(
+            <path key="a" d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="b" d={arcPath(x1, y1, x2, y2, bow, 4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="c" d={arcPath(x1, y1, x2, y2, bow, -4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />
           );
           break;
         case 'distant': // 소원: 가는 점선 호
-          elements.push(
-            <path key={`emo-${idx}`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="5 5" />
+          parts.push(
+            <path key="a" d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" strokeDasharray="5 5" />
           );
           break;
         case 'conflictual': // 갈등: 지그재그 호
-          elements.push(
-            <path key={`emo-${idx}`} d={arcZigzag(x1, y1, x2, y2, bow, 5, 12)} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeLinecap="round" />
+          parts.push(
+            <path key="a" d={arcZigzag(x1, y1, x2, y2, bow, 5, 12)} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeLinecap="round" />
           );
           break;
         case 'fused_conflictual': // 밀착된 갈등: 삼중 녹색 호 + 위에 빨강 지그재그
-          elements.push(
-            <path key={`emo-${idx}-a`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-b`} d={arcPath(x1, y1, x2, y2, bow, 4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-c`} d={arcPath(x1, y1, x2, y2, bow, -4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-z`} d={arcZigzag(x1, y1, x2, y2, bow, 5, 12)} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeLinecap="round" />
+          parts.push(
+            <path key="a" d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="b" d={arcPath(x1, y1, x2, y2, bow, 4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="c" d={arcPath(x1, y1, x2, y2, bow, -4)} fill="none" stroke="#059669" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="z" d={arcZigzag(x1, y1, x2, y2, bow, 5, 12)} fill="none" stroke="#dc2626" strokeWidth={1.5} strokeLinecap="round" />
           );
           break;
         case 'hostile': // 적대: 굵은 지그재그
-          elements.push(
-            <path key={`emo-${idx}`} d={arcZigzag(x1, y1, x2, y2, bow, 7, 10)} fill="none" stroke="#dc2626" strokeWidth={2.5} strokeLinecap="round" />
+          parts.push(
+            <path key="a" d={arcZigzag(x1, y1, x2, y2, bow, 7, 10)} fill="none" stroke="#dc2626" strokeWidth={2.5} strokeLinecap="round" />
           );
           break;
         case 'cut_off': { // 단절: 연속 호 1개 + 중점 접선에 수직 막대 2개(-||-)
-          elements.push(
-            <path key={`emo-${idx}-arc`} d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />
+          parts.push(
+            <path key="arc" d={arcPath(x1, y1, x2, y2, bow, 0)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />
           );
           const { cx, cy } = arcControl(x1, y1, x2, y2, bow);
           const Bx = 0.25 * x1 + 0.5 * cx + 0.25 * x2;
@@ -1014,14 +1138,23 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           const b = 7;
           const bar = (o: number) =>
             `M ${Bx + ux * o + nx * b} ${By + uy * o + ny * b} L ${Bx + ux * o - nx * b} ${By + uy * o - ny * b}`;
-          elements.push(
-            <path key={`emo-${idx}-bar1`} d={bar(-5)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />,
-            <path key={`emo-${idx}-bar2`} d={bar(5)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />
+          parts.push(
+            <path key="bar1" d={bar(-5)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />,
+            <path key="bar2" d={bar(5)} fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeLinecap="round" />
           );
           break;
         }
         default:
           break;
+      }
+      // 화면·인쇄 양쪽 모두 0일 때만 건너뛴다 — 한쪽만 0이면 요소가 남아 있어야
+      // 나머지 한쪽에서 그릴 수 있다(예: 화면 0% + 인쇄 적용 OFF → 인쇄본에는 기본 농도로 나감).
+      if (parts.length > 0 && (opacity > 0 || printOpacity > 0)) {
+        elements.push(
+          <g key={`emo-${idx}`} opacity={opacity} data-print-opacity={printOpacity}>
+            {parts}
+          </g>
+        );
       }
     });
 
@@ -1041,7 +1174,9 @@ export default function GenogramCanvas({ data: initialData }: Props) {
       .some((h) => !hiddenHouseholdIds.has(h.id));
     if (used.size === 0 && !hasHouseholds) return null;
 
-    const rows = EMOTION_TYPES.filter((r) => used.has(r.key));
+    // 범례 행은 정서선 유형 + 동거가족 한 줄이라 defaultOpacity가 없는 넓은 타입으로 받는다.
+    // (범례 샘플은 농도 슬라이더와 연동하지 않는다 — 범례는 읽으라고 있는 것이라 항상 불투명하게 그린다.)
+    const rows: { key: string; label: string }[] = EMOTION_TYPES.filter((r) => used.has(r.key));
     if (hasHouseholds) rows.push({ key: 'household', label: HOUSEHOLD_LABEL });
 
     const x0 = 16;
@@ -1573,6 +1708,15 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                               className="h-4 w-4 accent-blue-600"
                             />
                           </label>
+                          {/* 유형별 농도 + [초기화] + [인쇄 적용] — 위 체크박스(개별 on/off)와는 독립 */}
+                          <OpacityRow
+                            value={linkOpacityByType[group.key] ?? 1}
+                            defaultValue={DEFAULT_LINK_OPACITY[group.key] ?? 1}
+                            printApply={printApplyByType[group.key] ?? true}
+                            onChange={(v) => setTypeOpacity(group.key, v)}
+                            onReset={() => resetTypeOpacity(group.key)}
+                            onTogglePrint={() => togglePrintApply(group.key)}
+                          />
                           <div className="ml-3 space-y-1 border-l-2 border-slate-100 pl-3">
                             {group.items.map((item) => (
                               <label key={item.id} className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
@@ -1608,6 +1752,15 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                               className="h-4 w-4 accent-blue-600"
                             />
                           </label>
+                          {/* 동거가족 농도 — 유형이 하나뿐이라 그룹 전체에 단일 값 적용(경계선+라벨) */}
+                          <OpacityRow
+                            value={householdOpacity}
+                            defaultValue={HOUSEHOLD_DEFAULT_OPACITY}
+                            printApply={householdPrintApply}
+                            onChange={setHouseholdOpacity}
+                            onReset={() => setHouseholdOpacity(HOUSEHOLD_DEFAULT_OPACITY)}
+                            onTogglePrint={() => setHouseholdPrintApply((v) => !v)}
+                          />
                           <div className="ml-3 space-y-1 border-l-2 border-slate-100 pl-3">
                             {visibleRelations.households.map((h) => (
                               <label key={h.id} className="flex cursor-pointer items-center gap-2 text-xs text-slate-600">
