@@ -46,8 +46,20 @@ export default function GenogramModal() {
       } else {
         console.log('Fetching genogram data from /api/mock-genogram'); // 디버깅용 로그
         fetch('/api/mock-genogram')
-          .then(res => res.json())
-          .then(setData);
+          .then(async (res) => {
+            const result = await res.json().catch(() => null);
+            // 목업 파일(lib/mockdata_*.jsonl, gitignore 대상)이 없으면 500 + { error } 응답 → 캔버스 크래시 방지
+            if (!res.ok || !Array.isArray(result?.nodes) || !Array.isArray(result?.familyUnits)) {
+              throw new Error(result?.error || `목업 데이터 로드 실패 (HTTP ${res.status})`);
+            }
+            return result as BWGenogramData;
+          })
+          .then(setData)
+          .catch(err => {
+            console.error(err);
+            alert('목업 가계도 데이터를 불러오지 못했습니다. (lib/mockdata_2.jsonl 파일 필요)');
+            router.back();
+          });
       }
     }
     // 의도적으로 show 변경 시에만 실행 (counselText/Target 등은 모달이 열릴 때의 값을 사용)
