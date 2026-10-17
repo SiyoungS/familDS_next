@@ -29,6 +29,7 @@
   > 메모: react/react-dom 19.3.1(정확히 고정), @types 19.3.0.
 - [x] `@google/genai` 2.13 → 2.30 (Gemini 폴백 체인 `app/api/generate/genai-client.ts` 동작 확인)
 - [x] `mongodb` 7.2 → 7.7
+  > 메모(2026-10-18): Vercel 배포 후 로그인 검증 실패가 발생해, 정상 동작 중인 다른 프로젝트 기준으로 `~7.3.0`(7.3.0)으로 되돌림. 원인 확정 전 임시 조치
 - [x] `jose` 6.2.3 → 6.2.x 최신
 - [x] `lucide-react` 1.23 → 1.59 (아이콘 이름 변경·삭제 여부 확인)
 - [x] `zod` 4.4 → 4.6 (5번에서 제거할 예정이면 생략)
@@ -60,6 +61,7 @@
   > 메모: 보류, 5.9.3(5.x 최신) 유지. Next 16.3+의 TS7 지원은 `tsc` CLI를 쓰는 실험 기능으로 문서에 프로덕션 비권장이며, `typescript-eslint` 8.58.2의 typescript peer가 `<6.1.0`이라 린트도 깨짐.
 - [x] `@types/node` ^20 → 배포 런타임(Vercel Node 버전)에 맞추기
   > 메모: Vercel 기본값이 Node 24.x(22.x도 지원, 20은 2026-10-01 지원 종료)라 `@types/node` 24.19.2로 올리고 `package.json`에 `"engines": { "node": "24.x" }` 추가. 로컬도 Node 24.
+  > 메모(2026-10-18): Vercel 로그인 검증 실패 대응으로 되돌림. `engines` 제거(Node 버전은 Vercel 대시보드 설정을 따름), `@types/node` ^20, tailwind·typescript·eslint 범위도 다른 프로젝트와 같게 `^4`/`^5`/`^9`로 맞춤
 
 ## 5. 정리
 
