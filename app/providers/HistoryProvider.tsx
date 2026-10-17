@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { BWGenogramData } from '@/types/bowengenogram.types';
 import type { HistoryItem, SavedHistory } from '@/types/history';
 
@@ -27,28 +27,31 @@ function newId() {
 export function HistoryProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<HistoryItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const hydrated = useRef(false);
+  // 복원 완료 여부를 state로 관리: ref로 두면 복원 effect 직후 같은 커밋의 저장 effect가
+  // 아직 빈 items([])로 캐시를 덮어써, 개발 모드(StrictMode effect 재실행)에서 새로고침 시 목록이 사라졌다.
+  const [hydrated, setHydrated] = useState(false);
 
   // 세션 캐시 복원 (탭 세션 유지)
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem(STORAGE_KEY);
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionStorage는 마운트 후에만 읽을 수 있어 SSR 하이드레이션 불일치 방지를 위해 효과에서 복원
       if (raw) setItems(JSON.parse(raw) as HistoryItem[]);
     } catch {
       /* ignore */
     }
-    hydrated.current = true;
+    setHydrated(true);
   }, []);
 
-  // 변경 시 세션 캐시에 저장
+  // 변경 시 세션 캐시에 저장 (복원 반영 이후에만)
   useEffect(() => {
-    if (!hydrated.current) return;
+    if (!hydrated) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     } catch {
       /* 용량 초과 등은 무시 */
     }
-  }, [items]);
+  }, [items, hydrated]);
 
   const addHistory = useCallback((data: { counselTarget: string; counselText: string; raw: BWGenogramData }) => {
     setItems((prev) => [

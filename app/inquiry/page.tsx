@@ -43,9 +43,15 @@ export default function InquiryPage() {
   const [loadingState, setLoadingState] = useState(false);
   const [notification, setNotification] = useState('');
   const [fetchError, setFetchError] = useState('');
-  const [charCount, setCharCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(5);
+  // 목록 길이·페이지 크기가 바뀌면 1페이지로 복귀 (렌더 중 이전 값과 비교해 리셋)
+  const [prevPageKey, setPrevPageKey] = useState({ length: inquiries.length, pageSize });
+  if (prevPageKey.length !== inquiries.length || prevPageKey.pageSize !== pageSize) {
+    setPrevPageKey({ length: inquiries.length, pageSize });
+    setCurrentPage(1);
+  }
+  const charCount = message.length;
   const [selectedAttachment, setSelectedAttachment] = useState<InquiryAttachment | null>(null);
 
   const standardLabel = useMemo(() => (isAdmin ? '관리자 문의 관리' : '문의하기'), [isAdmin]);
@@ -69,11 +75,6 @@ export default function InquiryPage() {
     }
   }, [loading, isAuthenticated]);
 
-  // keep charCount synced if message changes from elsewhere
-  useEffect(() => {
-    setCharCount(message.length);
-  }, [message]);
-
   // close modal on ESC
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -82,10 +83,6 @@ export default function InquiryPage() {
     if (selectedAttachment) window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [selectedAttachment]);
-
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [inquiries.length, pageSize]);
 
   async function loadInquiries() {
     setLoadingState(true);
@@ -130,7 +127,6 @@ export default function InquiryPage() {
       }
       setSubject('');
       setMessage('');
-      setCharCount(0);
       setAttachments([]);
       setNotification('문의가 정상적으로 접수되었습니다.');
       await loadInquiries();
@@ -271,7 +267,6 @@ export default function InquiryPage() {
                   onChange={(e) => {
                     const v = e.target.value;
                     setMessage(v.slice(0, 1000));
-                    setCharCount(v.slice(0, 1000).length);
                   }}
                   rows={6}
                   maxLength={1000}
@@ -314,6 +309,7 @@ export default function InquiryPage() {
                               onClick={() => setSelectedAttachment(file)}
                               className="mb-2 block w-full overflow-hidden rounded-lg border border-gray-200"
                             >
+                              {/* eslint-disable-next-line @next/next/no-img-element -- 사용자가 업로드한 data URL 이미지라 next/image 최적화 대상이 아님 */}
                               <img src={file.dataUrl} alt={file.name} className="h-28 w-40 md:h-32 md:w-48 object-cover" />
                             </button>
                           ) : null}
@@ -416,6 +412,7 @@ export default function InquiryPage() {
                                         onClick={() => setSelectedAttachment(file)}
                                         className="mb-2 block w-full overflow-hidden rounded-lg border border-gray-200"
                                       >
+                                        {/* eslint-disable-next-line @next/next/no-img-element -- 사용자가 업로드한 data URL 이미지라 next/image 최적화 대상이 아님 */}
                                         <img src={file.dataUrl} alt={file.name} className="h-28 w-40 md:h-32 md:w-48 object-cover" />
                                       </button>
                                     ) : null}
@@ -554,6 +551,7 @@ export default function InquiryPage() {
               </div>
             </div>
             <div className="flex items-center justify-center overflow-hidden rounded-xl bg-gray-50 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element -- 사용자가 업로드한 data URL 이미지라 next/image 최적화 대상이 아님 */}
               <img src={selectedAttachment.dataUrl} alt={selectedAttachment.name} className="max-h-[70vh] w-full object-contain" />
             </div>
           </div>

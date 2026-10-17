@@ -837,7 +837,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
 
       // --- 2단계: 자녀 연결선 렌더링 (childGroups 기반 평탄화) ---
       // 모든 childGroups에 포함된 자녀 ID 및 좌표 묶기
-      const childNodesWithPos = (unit.childGroups || []).reduce((acc: any[], group: ChildGroup) => {
+      const childNodesWithPos = (unit.childGroups || []).reduce((acc: { id: string; pos: { x: number; y: number }; groupType: ChildGroup['type'] }[], group: ChildGroup) => {
         const groupItems = group.child_ids.map(id => ({
           id,
           pos: nodePositions[id],
@@ -861,12 +861,12 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           />
         );
         // 자녀 수평바의 min/max X
-        let xCoords:number[] = [];
+        const xCoords:number[] = [];
         
 
         // 각 자녀 노드 머리 위로 수직 하강하는 꺾임선 연결
         // (단, 쌍둥이 그룹인 경우 분기점이 달라지는 특수 규칙 적용)
-        let processedTwinIds = new Set<string>();
+        const processedTwinIds = new Set<string>();
 
         (unit.childGroups || []).forEach((group, gIdx) => {
           if (group.type === 'identical_twins' || group.type === 'fraternal_twins') {
@@ -885,7 +885,6 @@ export default function GenogramCanvas({ data: initialData }: Props) {
 
               // 일란성(identical) 쌍둥이인 경우 두 사선 사이를 연결하는 수평 가로선 추가 (보웬 규칙)
               if (group.type === 'identical_twins') {
-                const innerY = childBranchY + 30; // V자 중간 높이 계산
                 // 두 자녀 X 좌표의 내분점을 활용한 짧은 링킹 바
                 elements.push(
                   <line key={`twin-identical-bar-${unit.id}-${gIdx}`} x1={twinNodes[0].pos.x} y1={twinNodes[0].pos.y - 25} x2={twinNodes[1].pos.x} y2={twinNodes[1].pos.y - 25} stroke="#333" strokeWidth="2" />
@@ -1813,8 +1812,6 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           {processedData.nodes.map((node) => {
             const { x, y } = node.layoutPosition;
             const isIP = node.attributes.is_ip;
-            const nameLength = node.name.length;
-            const estimatedWidth = Math.max(90, nameLength * 12);
 
             return (
               <g key={node.id} transform={`translate(${x}, ${y})`}>

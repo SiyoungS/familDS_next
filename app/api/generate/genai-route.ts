@@ -1,4 +1,5 @@
 import { bwGenogramSchema } from "./genai-schema";
+import type { BWGenogramData } from "@/types/bowengenogram.types";
 import { generateGeminiJson } from "./genai-client";
 
 interface GeminiRequestBody {
@@ -15,7 +16,7 @@ interface GeminiRequestBody {
 export async function CallGemini(requestBody: GeminiRequestBody) {
   const { counselText, counselTarget, prompt } = requestBody;
 
-  return generateGeminiJson({
+  return generateGeminiJson<BWGenogramData>({
     callerName: "CallGemini",
     contents: `### [Identified Patient (IP)]\n${counselTarget}\n\n### [Counseling Scenario]\n${counselText}`,
     systemInstruction: prompt,

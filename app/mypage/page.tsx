@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/providers/AuthProvider';
 import FloatingAccountControls from '@/components/FloatingAccountControls';
@@ -8,7 +8,6 @@ import FloatingAccountControls from '@/components/FloatingAccountControls';
 export default function MyPage() {
   const router = useRouter();
   const { user, isAuthenticated, loading, logout } = useAuth();
-  const [notice, setNotice] = useState('');
 
   useEffect(() => {
     if (!loading && !isAuthenticated) {

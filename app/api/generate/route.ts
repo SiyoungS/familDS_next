@@ -9,6 +9,7 @@ import { CallGemini } from './genai-route';
 import { CallGeminiRelations, type FamilyRelation } from './genai-relations';
 import { CallGeminiEmotions } from './genai-emotions';
 import { applyEmotions } from './apply-emotions';
+import type { BWGenogramData, PersonNode, FamilyUnit } from '@/types/bowengenogram.types';
 
 // getSession은 next/headers의 cookies를 사용하므로 Node.js 런타임 필요
 export const runtime = 'nodejs';
@@ -22,17 +23,17 @@ const getThisYear = (timezoneOffset:number) => {
 }
 
 // 확정된 구조를 '부부 목록' 요약 문자열로 (2차 관계 추출 호출의 입력)
-function buildStructureSummary(data: any): string {
-  const nameOf = (id: string) => data.nodes?.find((n: any) => n.id === id)?.name || `(${id})`;
+function buildStructureSummary(data: BWGenogramData): string {
+  const nameOf = (id: string) => data.nodes?.find((n: PersonNode) => n.id === id)?.name || `(${id})`;
   return (data.familyUnits || [])
-    .map((u: any) => `${u.id}: ${(u.parent_ids || []).map(nameOf).join(' ↔ ')}`)
+    .map((u: FamilyUnit) => `${u.id}: ${(u.parent_ids || []).map(nameOf).join(' ↔ ')}`)
     .join('\n');
 }
 
 // 2차에서 받은 관계(legal_status/연도)를 구조에 병합 (구조는 유지, 관계 필드만 채움)
-function applyRelations(data: any, relations: FamilyRelation[]) {
+function applyRelations(data: BWGenogramData, relations: FamilyRelation[]) {
   const byId = new Map(relations.map((r) => [r.unit_id, r]));
-  (data.familyUnits || []).forEach((u: any) => {
+  (data.familyUnits || []).forEach((u: FamilyUnit) => {
     const r = byId.get(u.id);
     if (!r) return;
     u.legal_status = r.legal_status;
@@ -45,9 +46,9 @@ function applyRelations(data: any, relations: FamilyRelation[]) {
 }
 
 // 확정된 인물 목록을 'id: 이름' 요약 문자열로 (정서 관계선 추출 호출의 입력)
-function buildNodeSummary(data: any): string {
+function buildNodeSummary(data: BWGenogramData): string {
   return (data.nodes || [])
-    .map((n: any) => `${n.id}: ${n.name}`)
+    .map((n: PersonNode) => `${n.id}: ${n.name}`)
     .join('\n');
 }
 
@@ -67,7 +68,7 @@ export async function POST(req: Request) {
   console.log(`thisYear : ${thisYear}`);
 
   const systemPrompt = await getSystemPrompt_bowen(selectAPI, thisYear);
-  let rawData:any = null;
+  let rawData: BWGenogramData | null = null;
   try {
     if (selectAPI === "gemini") {
       rawData = await CallGemini({
@@ -116,11 +117,11 @@ export async function POST(req: Request) {
       console.error("Emotions chaining failed (fallback to structure links):", emoErr);
     }
 
-    const processedData = processGenogramData(rawData);
+    const processedData = processGenogramData(rawData as BWGenogramData);
     console.log("Processed Genogram Data with Layout");
     // raw(가공 전)는 히스토리 저장/재처리용, processed는 화면 표시용
     return NextResponse.json({ raw: rawData, processed: processedData });
-  } catch (error) {
+  } catch {
     return NextResponse.json({ error: "Data generation failed" }, { status: 500 });
   }
 }

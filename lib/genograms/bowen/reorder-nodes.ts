@@ -1,4 +1,4 @@
-import { BWGenogramData, PersonNode, FamilyUnit, RelationshipLink } from '@/types/bowengenogram.types';
+import { BWGenogramData, PersonNode, FamilyUnit } from '@/types/bowengenogram.types';
 export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
   console.log("===Reordering display_orders for Genogram Nodes===");
   console.log("data: ", JSON.stringify(data));

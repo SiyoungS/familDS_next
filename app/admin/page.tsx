@@ -47,9 +47,8 @@ export default function AdminPage() {
     }
   }, [loading, user, isAdmin, router]);
 
-  const load = useCallback(async () => {
-    setFetching(true);
-    setError('');
+  // 목록 조회 (상태 초기화 없음 — 초기 fetching=true 이므로 마운트 효과에서 바로 호출 가능)
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/users', { cache: 'no-store' });
       if (!res.ok) throw new Error('목록을 불러오지 못했습니다.');
@@ -62,9 +61,17 @@ export default function AdminPage() {
     }
   }, []);
 
+  // 재조회 (버튼·상태 변경 후): 로딩 표시를 켜고 다시 불러옴
+  const load = useCallback(async () => {
+    setFetching(true);
+    setError('');
+    await fetchUsers();
+  }, [fetchUsers]);
+
   useEffect(() => {
-    if (isAdmin) load();
-  }, [isAdmin, load]);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 마운트/권한 확정 시 외부 API 조회 (setState는 await 이후에만 실행되는 오탐)
+    if (isAdmin) fetchUsers();
+  }, [isAdmin, fetchUsers]);
 
   const changeStatus = async (email: string, status: AdminUser['status']) => {
     try {

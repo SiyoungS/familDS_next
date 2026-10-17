@@ -2,6 +2,9 @@
   "name": "genogram-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -9,27 +12,26 @@
     "lint": "eslint"
   },
   "dependencies": {
-    "@google/genai": "^2.13.0",
-    "@next/env": "^16.2.4",
-    "firebase": "^12.15.0",
-    "framer-motion": "^12.40.0",
-    "jose": "^6.2.3",
-    "lucide-react": "^1.23.0",
-    "mongodb": "^7.2.0",
-    "next": "16.2.4",
-    "openai": "^6.35.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "zod": "^4.4.3"
+    "@google/genai": "^2.30.0",
+    "@next/env": "^16.4.2",
+    "firebase": "^13.0.0",
+    "framer-motion": "^14.3.0",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.59.0",
+    "mongodb": "^7.7.0",
+    "next": "16.4.2",
+    "openai": "^7.36.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.2.4",
-    "tailwindcss": "^4",
-    "typescript": "^5"
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.2",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.3"
   }
 }

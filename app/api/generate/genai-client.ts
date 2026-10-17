@@ -52,12 +52,12 @@ interface GenerateGeminiJsonParams {
  * 앞 모델이 실패(예외/빈 응답/JSON 파싱 실패)하면 다음 모델로 재시도하고,
  * 체인의 모든 모델이 실패하면 예외를 던진다.
  */
-export async function generateGeminiJson({
+export async function generateGeminiJson<T = Record<string, unknown>>({
   callerName,
   contents,
   systemInstruction,
   responseSchema,
-}: GenerateGeminiJsonParams): Promise<any> {
+}: GenerateGeminiJsonParams): Promise<T> {
   for (let i = 0; i < GEMINI_MODEL_CHAIN.length; i++) {
     const model = GEMINI_MODEL_CHAIN[i];
     try {

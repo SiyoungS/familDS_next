@@ -145,16 +145,14 @@ export default function Home() {
           { key: 'logout', label: '로그아웃', emphasized: true, onClick: async () => { await logout(); router.push('/auth/login'); } },
         ]}
       />
-      <RelationAnalysisPage isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
-      children={
-        (analysisStep === 'results' && data) ? (
+      <RelationAnalysisPage isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen}>
+        {(analysisStep === 'results' && data) ? (
           <GenogramCanvas data={data} />
         ) : <RelationAnalysisCenterCard 
         isMenuOpen={isMenuOpen} setIsMenuOpen={setIsMenuOpen} 
         variants={cardVariant}
-        />
-      }
-      />
+        />}
+      </RelationAnalysisPage>
       <AnalysisEnginePage 
         isMenuOpen={isMenuOpen}
         setIsMenuOpen={setIsMenuOpen}

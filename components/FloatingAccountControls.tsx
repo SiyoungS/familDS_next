@@ -1,6 +1,6 @@
 'use client';
 
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 // 리퀴드 글래스 공통 스타일
 const GLASS =
@@ -43,29 +43,35 @@ export default function FloatingAccountControls({
   position?: 'absolute' | 'fixed';
   collapseBelow?: number;
 }) {
-  const [expanded, setExpanded] = useState(!isFullscreen);
-  const [narrow, setNarrow] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // 뷰포트 폭이 기준 미만이면 십자(축소) 모드
-  useEffect(() => {
-    if (collapseBelow == null) {
-      setNarrow(false);
-      return;
-    }
-    const mql = window.matchMedia(`(max-width: ${collapseBelow - 1}px)`);
-    const update = () => setNarrow(mql.matches);
-    update();
-    mql.addEventListener('change', update);
-    return () => mql.removeEventListener('change', update);
-  }, [collapseBelow]);
+  // 뷰포트 폭이 기준 미만이면 십자(축소) 모드 (서버/하이드레이션 시에는 false)
+  const subscribeNarrow = useCallback(
+    (onChange: () => void) => {
+      if (collapseBelow == null) return () => {};
+      const mql = window.matchMedia(`(max-width: ${collapseBelow - 1}px)`);
+      mql.addEventListener('change', onChange);
+      return () => mql.removeEventListener('change', onChange);
+    },
+    [collapseBelow],
+  );
+  const narrow = useSyncExternalStore(
+    subscribeNarrow,
+    () => (collapseBelow == null ? false : window.matchMedia(`(max-width: ${collapseBelow - 1}px)`).matches),
+    () => false,
+  );
 
   const collapsible = isFullscreen || narrow;
+  // 초기값은 첫 렌더의 접힘 조건 기준. 인증 로딩 뒤 클라이언트에서 처음 마운트될 때는
+  // narrow가 이미 실제 값이므로, 이 시점에 좁은 화면이면 십자(축소)로 시작해야 한다.
+  const [expanded, setExpanded] = useState(!collapsible);
 
-  // 접힘 조건 진입 → 십자(축소), 해제 → 패널 유지
-  useEffect(() => {
+  // 접힘 조건 진입 → 십자(축소), 해제 → 패널 유지 (렌더 중 이전 값과 비교해 리셋)
+  const [prevCollapsible, setPrevCollapsible] = useState(collapsible);
+  if (prevCollapsible !== collapsible) {
+    setPrevCollapsible(collapsible);
     setExpanded(!collapsible);
-  }, [collapsible]);
+  }
 
   // 컴포넌트 밖 클릭 시 접기 (접힘 조건 + 펼쳐진 상태에서만)
   useEffect(() => {

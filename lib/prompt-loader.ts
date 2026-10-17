@@ -19,7 +19,7 @@ async function loadPromptPart(key: PromptKey): Promise<string> {
   }
   console.warn(`DB에 ${key} 프롬프트 없음, 파일 폴백`);
   const { envVar, defaultPath } = FALLBACK_ENV[key];
-  const filePath = path.join(process.cwd(), process.env[envVar] || defaultPath);
+  const filePath = path.join(/*turbopackIgnore: true*/ process.cwd(), process.env[envVar] || defaultPath);
   return fs.readFileSync(filePath, 'utf8');
 }
 

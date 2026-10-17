@@ -12,14 +12,15 @@ export default function GenogramModal() {
   const counselTarget = searchParams.get('target') || '';
   const counselText = searchParams.get('text') || '';
   const [data, setData] = useState<BWGenogramData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  // 모달이 다시 열릴 때 이전 데이터 초기화 (렌더 중 이전 show 값과 비교)
+  const [prevShow, setPrevShow] = useState(show);
+  if (prevShow !== show) {
+    setPrevShow(show);
+    if (show) setData(null);
+  }
 
   useEffect(() => {
     if (show) {
-      setIsLoading(true);
-      if (data!=null) {
-        setData(null);
-      }
       console.log('Counsel Target for Genogram:', counselTarget); // 디버깅용 로그
       console.log('Counsel Text for Genogram:', counselText); // 디버깅용 로그
       const flag = false;
@@ -41,16 +42,16 @@ export default function GenogramModal() {
           alert('가계도 생성에 실패했습니다. 다시 시도해주세요.');
           
           router.back();
-        })
-        .finally(() => setIsLoading(false));
+        });
       } else {
         console.log('Fetching genogram data from /api/mock-genogram'); // 디버깅용 로그
         fetch('/api/mock-genogram')
           .then(res => res.json())
-          .then(setData)
-          .finally(() => setIsLoading(false));
+          .then(setData);
       }
     }
+    // 의도적으로 show 변경 시에만 실행 (counselText/Target 등은 모달이 열릴 때의 값을 사용)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [show]);
 
   if (!show) return null;

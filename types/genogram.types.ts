@@ -20,7 +20,9 @@ export interface GenogramNode {
     birthDate?: string;
     deathDate?: string;
     notes?: string;
-    [key: string]: any;
+    custodyId?: string;            // 양육권자 ID
+    isRaisedByCurrent?: boolean;   // 현재 부부가 양육 중인지 여부
+    [key: string]: unknown;
   };
   canvasPosition?: { x: number; y: number }; // 렌더링 시 계산된 위치
 }

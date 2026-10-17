@@ -5,7 +5,7 @@ export default function AnalysisEnginePage({
   counselTarget,
   setCounselTarget,
   counselText,
-  setCounselText,  analysisStep,  setAnalysisStep,
+  setCounselText,  analysisStep,
   handleReset, handleAnalyze
 }: {
   isMenuOpen: boolean;

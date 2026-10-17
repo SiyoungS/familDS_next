@@ -4,7 +4,7 @@ import { createInquiry, listAllInquiries, listUserInquiries } from '@/lib/db/inq
 import { findUserByEmail } from '@/lib/db/users';
 import type { AppInquiry } from '@/types/inquiry';
 
-export async function GET(request: Request) {
+export async function GET() {
   const session = await getSession();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
