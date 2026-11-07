@@ -631,6 +631,12 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;
     color: #000; line-height: 1.2; text-align: center;
   }
+  /* 이름표 안쪽 보조 줄(서열/나이·건강 상태·사망 원인): 박스 스타일을 상속하지 않고 한 줄씩 표시 */
+  foreignObject span span {
+    display: block; border: 0; background: none; padding: 0; border-radius: 0;
+    margin-top: 2px; font-weight: 400; color: #475569;
+  }
+  foreignObject span span.italic { font-style: italic; border-top: 1px solid #e2e8f0; padding-top: 2px; }
   @media print {
     .toolbar { display: none !important; }
     /* 각 .page 를 물리적 A4 한 장으로 강제 분할 (브라우저 자동 축소 방지) */
@@ -2061,7 +2067,11 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                   // 글자 수에 따라 동적으로 가로 폭을 계산하되, 최소 100px에서 최대 160px 사이로 제한합니다.
                   // 건강 상태 3번째 줄(토글 ON + 일반 인물만) — 폭 계산에도 반영
                   const healthText = showHealth && node.type === 'person' ? getHealthLabel(node.attributes.health_status) : '';
-                  const dynamicBoxWidth = Math.min(120, Math.max(100, Math.max(nameLength, healthText.length) * 11));
+                  // 사망 원인 줄(사망한 일반 인물 + death_cause 있을 때만) — 건강 상태(생전 질병)와 구분해 별도 줄로 표기
+                  const deathCause = node.type === 'person' && node.attributes.is_deceased ? node.attributes.death_cause?.trim() ?? '' : '';
+                  const deathText = deathCause ? `사망: ${deathCause}` : '';
+                  const dynamicBoxWidth = Math.min(120, Math.max(100, Math.max(nameLength, healthText.length, deathText.length) * 11));
+                  const extraLines = (healthText ? 1 : 0) + (deathText ? 1 : 0);
 
                   // 말줄임(truncate)을 제거하고, 글자가 길어지면 아래로 늘어날 수 있도록 높이를 넉넉히 잡습니다.
                   return (
@@ -2069,7 +2079,7 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                       x={-(dynamicBoxWidth / 2)}
                       y={32}
                       width={dynamicBoxWidth}
-                      height={healthText ? 104 : 80} // 2~3줄 줄바꿈 + 건강 상태 줄 대비
+                      height={80 + extraLines * 24} // 2~3줄 줄바꿈 + 건강 상태·사망 원인 줄 대비
                     >
                       <div className="w-full text-[11px] text-center font-semibold leading-tight text-black flex justify-center">
                         <span className="border bg-slate-50 border-slate-200 shadow-sm px-2 py-1 block rounded w-full break-all whitespace-normal">
@@ -2082,6 +2092,11 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                           {healthText && (
                             <span className="text-slate-600 font-normal block mt-0.5">
                               {healthText}
+                            </span>
+                          )}
+                          {deathText && (
+                            <span className="text-slate-500 font-normal italic block mt-0.5 pt-0.5 border-t border-slate-200">
+                              {deathText}
                             </span>
                           )}
                         </span>
