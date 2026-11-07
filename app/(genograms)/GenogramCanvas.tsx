@@ -190,6 +190,67 @@ const HOUSEHOLD_LABEL = '동거가족';
 // 동거가족 경계는 정서선이 아니라 배경 레이어라 기본은 불투명(1) — 슬라이더로만 낮춘다.
 const HOUSEHOLD_DEFAULT_OPACITY = 1;
 
+// 건강 상태 기호 색(흑백 인쇄에서도 흑색/진회색/흰색이 구분되도록 3값만 사용)
+const HEALTH_BLACK = '#111827';
+const HEALTH_GRAY = '#6b7280';
+const HEALTH_HATCH_STROKE = '#111827';
+
+type HealthStatus = NonNullable<PersonNode['attributes']['health_status']>;
+
+// 건강 상태 플래그 → 도형 안에서 칠할 영역(McGoldrick 표준 기호). 노드 렌더·범례가 공유한다.
+// 칠할 것이 없거나 health_status가 없으면 null. 확정(남용)이 있으면 의심 빗금은 그리지 않는다.
+interface HealthRegions {
+  leftBlack: boolean; // 좌측 절반(TL+BL) 흑색 — 신체·정신 질병
+  bottomBlack: boolean; // 하단 절반(BL+BR) 흑색 — 약물·알코올 남용
+  trGray: boolean; // 우상단 1/4 진회색 — 질병 호전
+  brGray: boolean; // 우하단 1/4 진회색 — 남용 회복
+  hatch: boolean; // 하단 절반 사선 빗금 — 남용 의심
+}
+function getHealthRegions(hs?: HealthStatus): HealthRegions | null {
+  if (!hs) return null;
+  const r: HealthRegions = {
+    leftBlack: !!hs.physical_mental_illness,
+    bottomBlack: !!hs.substance_abuse,
+    trGray: !!hs.illness_recovery,
+    brGray: !!hs.substance_recovery,
+    hatch: !!hs.abuse_suspected && !hs.substance_abuse,
+  };
+  return r.leftBlack || r.bottomBlack || r.trGray || r.brGray || r.hatch ? r : null;
+}
+
+// 이름표 3번째 줄 문구. 켜진 항목만 " · "로 연결, 없으면 ''.
+function getHealthLabel(hs?: HealthStatus): string {
+  if (!hs) return '';
+  const parts: string[] = [];
+  if (hs.physical_mental_illness) parts.push(hs.illness_recovery ? '질병(호전)' : '질병');
+  else if (hs.illness_recovery) parts.push('질병 호전');
+  if (hs.substance_abuse) parts.push(hs.substance_recovery ? '남용(회복)' : '남용');
+  else if (hs.substance_recovery) parts.push('남용 회복');
+  if (hs.abuse_suspected && !hs.substance_abuse) parts.push('남용 의심');
+  return parts.join(' · ');
+}
+
+// 중심 (0,0), 반크기 h인 정사각 영역에 건강 상태 칠 레이어를 그린다(흑색 → 진회색 → 빗금 순).
+function renderHealthFill(r: HealthRegions, h: number, hatchId: string): React.JSX.Element[] {
+  const els: React.JSX.Element[] = [];
+  if (r.leftBlack) els.push(<rect key="lb" x={-h} y={-h} width={h} height={h * 2} fill={HEALTH_BLACK} />);
+  if (r.bottomBlack) els.push(<rect key="bb" x={-h} y={0} width={h * 2} height={h} fill={HEALTH_BLACK} />);
+  if (r.hatch) els.push(<rect key="ht" x={-h} y={0} width={h * 2} height={h} fill={`url(#${hatchId})`} />);
+  if (r.trGray) els.push(<rect key="tg" x={0} y={-h} width={h} height={h} fill={HEALTH_GRAY} />);
+  if (r.brGray) els.push(<rect key="bg" x={0} y={0} width={h} height={h} fill={HEALTH_GRAY} />);
+  return els;
+}
+
+// 사선 빗금 pattern(흰 바탕 + 흑색 선). 노드마다/범례마다 고유 id로 인라인 정의한다.
+function renderHatchPattern(id: string, spacing: number, strokeWidth: number): React.JSX.Element {
+  return (
+    <pattern id={id} patternUnits="userSpaceOnUse" width={spacing} height={spacing} patternTransform="rotate(45)">
+      <rect width={spacing} height={spacing} fill="#ffffff" />
+      <line x1={0} y1={0} x2={0} y2={spacing} stroke={HEALTH_HATCH_STROKE} strokeWidth={strokeWidth} />
+    </pattern>
+  );
+}
+
 // 유형 키 → 농도 초기값. EMOTION_TYPES에서 파생하므로 유형 추가 시 여기는 고칠 필요가 없다.
 const DEFAULT_LINK_OPACITY: Record<string, number> = Object.fromEntries(
   EMOTION_TYPES.map((t) => [t.key, t.defaultOpacity])
@@ -317,6 +378,8 @@ export default function GenogramCanvas({ data: initialData }: Props) {
   const [showAgeInLabel, setShowAgeInLabel] = useState(true);
   // 출생 서열(N째) 표시 — 기본 OFF. showLabels의 하위 옵션.
   const [showBirthOrder, setShowBirthOrder] = useState(false);
+  // 건강 상태(질병·남용) 도형 기호/이름표 줄/범례 표시 — 기본 ON.
+  const [showHealth, setShowHealth] = useState(true);
   // 나이 표기 방식 — 기본 만 나이. showLabels의 하위 옵션.
   const [ageMode, setAgeMode] = useState<AgeMode>('actual');
   // 표시 옵션 팝오버
@@ -1171,12 +1234,32 @@ export default function GenogramCanvas({ data: initialData }: Props) {
     );
     const hasHouseholds = getVisibleHouseholds(processedData.households ?? [], processedData.nodes, nodePositions)
       .some((h) => !hiddenHouseholdIds.has(h.id));
-    if (used.size === 0 && !hasHouseholds) return null;
+    // 건강 상태: 토글 ON일 때 실제 도형에 칠해진 항목만(getHealthRegions와 같은 판정)
+    const healthUsed = { leftBlack: false, bottomBlack: false, trGray: false, brGray: false, hatch: false };
+    if (showHealth) {
+      processedData.nodes.forEach((n) => {
+        if (n.type !== 'person') return;
+        const r = getHealthRegions(n.attributes.health_status);
+        if (!r) return;
+        (Object.keys(healthUsed) as (keyof HealthRegions)[]).forEach((k) => {
+          if (r[k]) healthUsed[k] = true;
+        });
+      });
+    }
+    const healthRows: { key: string; label: string }[] = [
+      { key: 'health-illness', label: '신체·정신 질병', on: healthUsed.leftBlack },
+      { key: 'health-illness-rec', label: '질병 호전', on: healthUsed.trGray },
+      { key: 'health-abuse', label: '약물·알코올 남용', on: healthUsed.bottomBlack },
+      { key: 'health-abuse-rec', label: '남용 회복', on: healthUsed.brGray },
+      { key: 'health-suspected', label: '남용 의심', on: healthUsed.hatch },
+    ].filter((r) => r.on);
+    if (used.size === 0 && !hasHouseholds && healthRows.length === 0) return null;
 
-    // 범례 행은 정서선 유형 + 동거가족 한 줄이라 defaultOpacity가 없는 넓은 타입으로 받는다.
+    // 범례 행은 정서선 유형 + 동거가족 + 건강 상태 한 줄이라 defaultOpacity가 없는 넓은 타입으로 받는다.
     // (범례 샘플은 농도 슬라이더와 연동하지 않는다 — 범례는 읽으라고 있는 것이라 항상 불투명하게 그린다.)
     const rows: { key: string; label: string }[] = EMOTION_TYPES.filter((r) => used.has(r.key));
     if (hasHouseholds) rows.push({ key: 'household', label: HOUSEHOLD_LABEL });
+    healthRows.forEach((r) => rows.push({ key: r.key, label: r.label }));
 
     const x0 = 16;
     const y0 = 16;
@@ -1241,13 +1324,31 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           return [
             <rect key="s1" x={sx} y={cy - 6} width={sw} height={12} rx={6} fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="0.5 6" strokeLinecap="round" />,
           ];
-        default:
-          return [];
+        default: {
+          // 건강 상태 행: 작은 네모에 노드와 같은 방식으로 칠한 기호(해당 영역만)
+          const regions: HealthRegions = {
+            leftBlack: key === 'health-illness',
+            bottomBlack: key === 'health-abuse',
+            trGray: key === 'health-illness-rec',
+            brGray: key === 'health-abuse-rec',
+            hatch: key === 'health-suspected',
+          };
+          if (!key.startsWith('health-')) return [];
+          const hh = 7; // 샘플 반크기(14x14)
+          return [
+            <g key="hs" transform={`translate(${sx + sw / 2}, ${cy})`}>
+              <rect x={-hh} y={-hh} width={hh * 2} height={hh * 2} fill="#ffffff" />
+              {renderHealthFill(regions, hh, 'legend-health-hatch')}
+              <rect x={-hh} y={-hh} width={hh * 2} height={hh * 2} fill="none" stroke="#475569" strokeWidth={1.5} />
+            </g>,
+          ];
+        }
       }
     };
 
     return (
       <g>
+        {healthUsed.hatch && <defs>{renderHatchPattern('legend-health-hatch', 3, 1)}</defs>}
         <rect x={x0} y={y0} width={boxWidth} height={boxHeight} rx={8} fill="#ffffff" fillOpacity={0.92} stroke="#e2e8f0" strokeWidth={1} />
         {rows.map((r, i) => {
           const cy = y0 + pad + i * rowHeight + rowHeight / 2;
@@ -1682,6 +1783,17 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                   className="h-4 w-4 accent-blue-600 disabled:opacity-40"
                 />
               </label>
+
+              {/* 건강 상태 표시 — 기본 ON. 도형 기호·이름표 3번째 줄·범례 행을 함께 켜고 끈다 */}
+              <label className="flex cursor-pointer items-center justify-between gap-2 text-xs font-semibold text-slate-700">
+                <span>건강 상태 표시</span>
+                <input
+                  type="checkbox"
+                  checked={showHealth}
+                  onChange={(e) => setShowHealth(e.target.checked)}
+                  className="h-4 w-4 accent-blue-600"
+                />
+              </label>
             </div>
             )}
 
@@ -1809,9 +1921,23 @@ export default function GenogramCanvas({ data: initialData }: Props) {
           {renderHouseholds()}
           {renderRelationships()}
 
-          {processedData.nodes.map((node) => {
+          {processedData.nodes.map((node, nodeIdx) => {
             const { x, y } = node.layoutPosition;
             const isIP = node.attributes.is_ip;
+            // 건강 상태 기호: 토글 ON + 일반 인물(person)만. id는 노드별 고유(인덱스 + 정규화한 node.id)
+            const healthRegions = showHealth && node.type === 'person' ? getHealthRegions(node.attributes.health_status) : null;
+            const healthKey = `hs-${nodeIdx}-${String(node.id).replace(/[^A-Za-z0-9_-]/g, '_')}`;
+            const healthStroke = isIP && (node.gender === 'male' || node.gender === 'female') ? '#2563eb' : '#475569';
+            const healthStrokeW = isIP && (node.gender === 'male' || node.gender === 'female') ? 3.5 : 2;
+            // 도형별(네모/원/마름모) 외곽 요소 — clipPath와 테두리 재그리기가 같은 기하를 공유
+            const healthShape = (p: React.SVGProps<SVGElement>) =>
+              node.gender === 'male' ? (
+                <rect x={-25} y={-25} width={50} height={50} {...(p as React.SVGProps<SVGRectElement>)} />
+              ) : node.gender === 'female' ? (
+                <circle r={25} {...(p as React.SVGProps<SVGCircleElement>)} />
+              ) : (
+                <polygon points="0,-25 25,0 0,25 -25,0" {...(p as React.SVGProps<SVGPolygonElement>)} />
+              );
 
             return (
               <g key={node.id} transform={`translate(${x}, ${y})`}>
@@ -1844,12 +1970,32 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                   <polygon points="0,-25 25,0 0,25 -25,0" fill="white" stroke="#475569" strokeWidth={2} />
                 )}
 
-                {/* 2. 사망 X: 일반 인물(person)만 (손실 기호는 자체 표기) */}
+                {/* 1.5 건강 상태 칠(clip으로 도형 안쪽만) 후 테두리를 다시 그려 칠이 선을 덮지 않게 함 */}
+                {healthRegions && (
+                  <>
+                    <defs>
+                      <clipPath id={`${healthKey}-clip`}>{healthShape({})}</clipPath>
+                      {healthRegions.hatch && renderHatchPattern(`${healthKey}-hatch`, 5, 1.5)}
+                    </defs>
+                    <g clipPath={`url(#${healthKey}-clip)`}>{renderHealthFill(healthRegions, 25, `${healthKey}-hatch`)}</g>
+                    {healthShape({ fill: 'none', stroke: healthStroke, strokeWidth: healthStrokeW })}
+                  </>
+                )}
+
+                {/* 2. 사망 X: 일반 인물(person)만 (손실 기호는 자체 표기). 건강 기호가 있으면 흑색 위에서도 보이게 흰 외곽선을 깐다 */}
                 {node.type === 'person' && node.attributes.is_deceased && (
-                  <g stroke="#94a3b8" strokeWidth="2">
-                    <line x1={-20} y1={-20} x2={20} y2={20} />
-                    <line x1={20} y1={-20} x2={-20} y2={20} />
-                  </g>
+                  <>
+                    {healthRegions && (
+                      <g stroke="#ffffff" strokeWidth="5" strokeLinecap="round">
+                        <line x1={-20} y1={-20} x2={20} y2={20} />
+                        <line x1={20} y1={-20} x2={-20} y2={20} />
+                      </g>
+                    )}
+                    <g stroke={healthRegions ? '#475569' : '#94a3b8'} strokeWidth="2">
+                      <line x1={-20} y1={-20} x2={20} y2={20} />
+                      <line x1={20} y1={-20} x2={-20} y2={20} />
+                    </g>
+                  </>
                 )}
 
                 {/* 3. 내담자(IP) 이중 테두리 기호 처리 (보웬 원칙 준수) */}
@@ -1913,15 +2059,17 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                   const nameLength = nameText.length;
 
                   // 글자 수에 따라 동적으로 가로 폭을 계산하되, 최소 100px에서 최대 160px 사이로 제한합니다.
-                  const dynamicBoxWidth = Math.min(120, Math.max(100, nameLength * 11));
+                  // 건강 상태 3번째 줄(토글 ON + 일반 인물만) — 폭 계산에도 반영
+                  const healthText = showHealth && node.type === 'person' ? getHealthLabel(node.attributes.health_status) : '';
+                  const dynamicBoxWidth = Math.min(120, Math.max(100, Math.max(nameLength, healthText.length) * 11));
 
-                  // 말줄임(truncate)을 제거하고, 글자가 길어지면 아래로 늘어날 수 있도록 높이를 넉넉히(80px) 잡습니다.
+                  // 말줄임(truncate)을 제거하고, 글자가 길어지면 아래로 늘어날 수 있도록 높이를 넉넉히 잡습니다.
                   return (
                     <foreignObject
                       x={-(dynamicBoxWidth / 2)}
                       y={32}
                       width={dynamicBoxWidth}
-                      height={80} // 2~3줄 줄바꿈을 대비해 높이를 확장
+                      height={healthText ? 104 : 80} // 2~3줄 줄바꿈 + 건강 상태 줄 대비
                     >
                       <div className="w-full text-[11px] text-center font-semibold leading-tight text-black flex justify-center">
                         <span className="border bg-slate-50 border-slate-200 shadow-sm px-2 py-1 block rounded w-full break-all whitespace-normal">
@@ -1929,6 +2077,11 @@ export default function GenogramCanvas({ data: initialData }: Props) {
                           {bracketText && (
                             <span className="text-slate-500 font-normal block mt-0.5">
                               {bracketText}
+                            </span>
+                          )}
+                          {healthText && (
+                            <span className="text-slate-600 font-normal block mt-0.5">
+                              {healthText}
                             </span>
                           )}
                         </span>
