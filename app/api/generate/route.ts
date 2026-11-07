@@ -10,6 +10,7 @@ import { CallGeminiRelations, type FamilyRelation } from './genai-relations';
 import { CallGeminiEmotions } from './genai-emotions';
 import { applyEmotions } from './apply-emotions';
 import type { BWGenogramData, PersonNode, FamilyUnit } from '@/types/bowengenogram.types';
+import { devError } from '@/lib/dev-log';
 
 // getSession은 next/headers의 cookies를 사용하므로 Node.js 런타임 필요
 export const runtime = 'nodejs';
@@ -76,7 +77,8 @@ export async function POST(req: Request) {
         counselTarget,
         prompt: systemPrompt,
       }).catch((geminiError) => {
-        console.error("Error calling Gemini:", geminiError);
+        console.error("Error calling Gemini:", geminiError instanceof Error ? geminiError.message : String(geminiError));
+        devError("Error calling Gemini (detail):", geminiError);
         throw new Error("Gemini API call failed");
       });
     } else if (selectAPI === "openai") {
@@ -85,7 +87,8 @@ export async function POST(req: Request) {
         counselTarget,
         prompt: systemPrompt,
       }).catch((openaiError) => {
-        console.error("Error calling OpenAI:", openaiError);
+        console.error("Error calling OpenAI:", openaiError instanceof Error ? openaiError.message : String(openaiError));
+        devError("Error calling OpenAI (detail):", openaiError);
         throw new Error("OpenAI API call failed");
       });
     } else {
@@ -101,7 +104,8 @@ export async function POST(req: Request) {
         console.log(`Relations merged: ${relations.length} units`);
       }
     } catch (relErr) {
-      console.error("Relations chaining failed (fallback to structure legal_status):", relErr);
+      console.error("Relations chaining failed (fallback to structure legal_status):", relErr instanceof Error ? relErr.message : String(relErr));
+      devError("Relations chaining failed (detail):", relErr);
     }
 
     // [프롬프트 체이닝 2차] 확정된 인물 목록으로 정서 관계선(emotional_status)만 전담 추출 → union 병합.
@@ -114,7 +118,8 @@ export async function POST(req: Request) {
         console.log(`Emotions merged: ${emotionalLinks.length} extracted`);
       }
     } catch (emoErr) {
-      console.error("Emotions chaining failed (fallback to structure links):", emoErr);
+      console.error("Emotions chaining failed (fallback to structure links):", emoErr instanceof Error ? emoErr.message : String(emoErr));
+      devError("Emotions chaining failed (detail):", emoErr);
     }
 
     const processedData = processGenogramData(rawData as BWGenogramData);

@@ -1,4 +1,5 @@
 import { BWGenogramData, PersonNode, FamilyUnit } from '@/types/bowengenogram.types';
+import { devLog } from '../../dev-log';
 
 /**
  * relLevel을 가족 구조(familyUnits)로부터 결정적으로 재계산한다.
@@ -61,7 +62,7 @@ export function normalizeRelLevels(data: BWGenogramData): BWGenogramData {
   nodes.forEach((n) => {
     const lvl = level.get(n.id);
     if (lvl !== undefined && n.relLevel !== lvl) {
-      console.log(`normalizeRelLevels: ${n.name} relLevel ${n.relLevel} -> ${lvl}`);
+      devLog(`normalizeRelLevels: ${n.name} relLevel ${n.relLevel} -> ${lvl}`);
       n.relLevel = lvl;
     }
   });

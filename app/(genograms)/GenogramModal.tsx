@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { BWGenogramData } from '@/types/bowengenogram.types';
 import GenogramCanvas from './GenogramCanvas'; // 실제 그림을 그릴 컴포넌트
+import { devLog, devError } from '@/lib/dev-log';
 
 export default function GenogramModal() {
   const router = useRouter();
@@ -21,11 +22,11 @@ export default function GenogramModal() {
 
   useEffect(() => {
     if (show) {
-      console.log('Counsel Target for Genogram:', counselTarget); // 디버깅용 로그
-      console.log('Counsel Text for Genogram:', counselText); // 디버깅용 로그
+      devLog('Counsel Target for Genogram:', counselTarget); // 디버깅용 로그
+      devLog('Counsel Text for Genogram:', counselText); // 디버깅용 로그
       const flag = false;
       if (flag) {
-        console.log('Fetching genogram data from /api/generate with payload:', { counselText, counselTarget }); // 디버깅용 로그
+        devLog('Fetching genogram data from /api/generate with payload:', { counselText, counselTarget }); // 디버깅용 로그
         fetch('/api/generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -33,12 +34,12 @@ export default function GenogramModal() {
         })
         .then(res => {
           if (!res.ok) throw new Error('데이터 생성 실패');
-          console.log('Raw response from /api/generate:', res); // 디버깅용 로그
+          devLog('Raw response from /api/generate:', res); // 디버깅용 로그
           return res.json();
         })
         .then(setData)
         .catch(err => {
-          console.error(err);
+          devError(err);
           alert('가계도 생성에 실패했습니다. 다시 시도해주세요.');
           
           router.back();
@@ -56,7 +57,7 @@ export default function GenogramModal() {
           })
           .then(setData)
           .catch(err => {
-            console.error(err);
+            devError(err);
             alert('목업 가계도 데이터를 불러오지 못했습니다. (lib/mockdata_2.jsonl 파일 필요)');
             router.back();
           });

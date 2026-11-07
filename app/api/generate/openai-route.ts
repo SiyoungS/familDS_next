@@ -1,4 +1,5 @@
 import OpenAI from 'openai';
+import { devError } from '@/lib/dev-log';
 interface OpenAIRequestBody {
   counselText: string;
   counselTarget: string;
@@ -25,7 +26,8 @@ export async function CallOpenAI(requestBody: OpenAIRequestBody) {
     const rawData = JSON.parse(rawContent);
     return rawData;
   } catch (error) {
-    console.error("Error in CallOpenAI:", error);
+    console.error("Error in CallOpenAI:", error instanceof Error ? error.message : String(error));
+    devError("Error in CallOpenAI (detail):", error);
     throw new Error("CallOpenAI: Data generation failed");
   }
 }

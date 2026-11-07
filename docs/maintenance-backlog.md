@@ -85,7 +85,7 @@
 - `eslint` 10: 하위 플러그인 peer 미지원으로 보류, 나중에 재확인
 - `typescript` 7: Next.js/typescript-eslint 미지원으로 보류, 나중에 재확인
 - `scripts/` 처리 결정(보관/삭제): 운영 DB 적용 여부 확인 후 사용자 결정 대기
-- **[보류: 다른 개발 완료 후 처리]** 서버 디버깅 로그의 민감정보 노출: `/api/generate` 경로의 `console.log`(`Raw response from Gemini`, `data:`, `levelGroups`, `displayOrders` 등)가 상담 내용에서 추출한 인물명·질환·사망원인·약물/학대 여부를 그대로 출력함. 운영(Vercel 함수 로그)에서는 끄거나 개발 환경 전용으로 제한할 것 (2026-10-18 런타임 점검 중 발견)
+- ~~**[보류: 다른 개발 완료 후 처리]** 서버 디버깅 로그의 민감정보 노출: `/api/generate` 경로의 `console.log`(`Raw response from Gemini`, `data:`, `levelGroups`, `displayOrders` 등)가 상담 내용에서 추출한 인물명·질환·사망원인·약물/학대 여부를 그대로 출력함. 운영(Vercel 함수 로그)에서는 끄거나 개발 환경 전용으로 제한할 것 (2026-10-18 런타임 점검 중 발견)~~ **[완료 2026-11-08]** 민감 로그를 `lib/dev-log.ts`의 `devLog`/`devWarn`/`devError`(NODE_ENV==='development'에서만 출력)로 교체. 운영 관측용 로그(모델명·건수·단계명·`err.message`)는 기존 console 유지, 오류 상세 객체는 devError로 분리.
 
 ### (b) 사람이 직접 확인해야 하는 런타임 점검
 

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 import { getSession } from '@/lib/auth/session';
 import { extractHwpText } from '@/lib/hwp/extract-text';
+import { devError } from '@/lib/dev-log';
 
 // HWP 파싱은 Node 내장 zlib/Buffer를 사용하므로 Node.js 런타임 필요
 export const runtime = 'nodejs';
@@ -29,7 +30,8 @@ export async function POST(req: Request) {
     return NextResponse.json({ fileName: file.name, text });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'HWP 텍스트 추출에 실패했습니다.';
-    console.error('hwp2txt error:', error);
+    console.error('hwp2txt error:', message);
+    devError('hwp2txt error (detail):', error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

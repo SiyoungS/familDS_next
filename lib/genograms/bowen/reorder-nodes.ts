@@ -1,7 +1,8 @@
 import { BWGenogramData, PersonNode, FamilyUnit } from '@/types/bowengenogram.types';
+import { devLog } from '@/lib/dev-log';
 export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
   console.log("===Reordering display_orders for Genogram Nodes===");
-  console.log("data: ", JSON.stringify(data));
+  devLog("data: ", JSON.stringify(data));
   // 깊은 복사로 원본 데이터 보존
   const nodes = JSON.parse(JSON.stringify(data.nodes)) as PersonNode[];
   // 빠른 검색을 위한 Map 생성
@@ -25,7 +26,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
     if (!levelGroups[node.relLevel]) levelGroups[node.relLevel] = [];
     levelGroups[node.relLevel].push(node);
   });
-  console.log("1. levelGroups : ", levelGroups);
+  devLog("1. levelGroups : ", levelGroups);
 
   // 0세대 전용 배우자 삽입 함수
   const insertSpouses = (siblingNodeArray: PersonNode[]) => {
@@ -189,7 +190,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       hasGen0Siblings = ipOlderSiblings.length > 0 || ipYoungerSiblings.length > 0 ||
         spouseOlderSiblings.length > 0 || spouseYoungerSiblings.length > 0;
 
-      console.log("1. Gen 0 : sortedGroup = ",sortedGroup.map(n => n.name));
+      devLog("1. Gen 0 : sortedGroup = ",sortedGroup.map(n => n.name));
     } else if (level > 0) {
       /**
        * 아랫 세대
@@ -205,10 +206,10 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
         if (!siblingGroups.has(key)) siblingGroups.set(key, []);
         siblingGroups.get(key)!.push(node);
       });
-      console.log(`2-1. Gen ${level} siblingGroups = `, Array.from(siblingGroups.entries().map(([k, v]) => [k, v.map(n => n.name)])));
+      devLog(`2-1. Gen ${level} siblingGroups = `, Array.from(siblingGroups.entries().map(([k, v]) => [k, v.map(n => n.name)])));
       // 부모 세대 정렬에 따라 자녀 세대의 display_order 결정
       const beforeLevelNodeGroup = nodes.filter(n => n.relLevel === level - 1).sort((a, b) => a.display_order - b.display_order);
-      console.log(`2-2. Gen ${level} beforeLevelNodeGroup = `, beforeLevelNodeGroup.map(n => `${n.name} (display_order: ${n.display_order})`));
+      devLog(`2-2. Gen ${level} beforeLevelNodeGroup = `, beforeLevelNodeGroup.map(n => `${n.name} (display_order: ${n.display_order})`));
 
       beforeLevelNodeGroup.forEach(parentNode => {
         // [#5] 한 부모가 여러 가족 단위(재혼 등)에 속할 수 있으므로 모든 단위를 순회한다.
@@ -217,11 +218,11 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
           const siblingGroup = siblingGroups.get(unit.id);
           if (!siblingGroup) return;
           const sortedSiblings = [...siblingGroup].sort(byBirthOrder); // [#6] 안정 정렬
-          console.log(`\nGen ${level} parentNode ${parentNode.name} (unit ${unit.id}) has siblingGroup = `, sortedSiblings.map(n => `${n.name} (birth_order: ${n.attributes.birth_order})`));
+          devLog(`\nGen ${level} parentNode ${parentNode.name} (unit ${unit.id}) has siblingGroup = `, sortedSiblings.map(n => `${n.name} (birth_order: ${n.attributes.birth_order})`));
           sortedSiblings.forEach(node => {
             if (sortedGroup.some(n => n.id === node.id)) return; // 이미 추가된 노드는 스킵
             const addedPartners = insertPartners(node); // 배우자 삽입
-            console.log(`ADD: Gen ${level} node ${node.name} with partners = `, addedPartners.map(n => n.name));
+            devLog(`ADD: Gen ${level} node ${node.name} with partners = `, addedPartners.map(n => n.name));
             sortedGroup.push(...addedPartners);
           });
         });
@@ -297,7 +298,7 @@ export function reorderDisplayOrders(data:BWGenogramData):BWGenogramData {
       sortedGroup.push(...unplacedNodes);
     }
     const displayOrders = sortedGroup.map((n,i) => `${n.id}:${n.name} (display_order: ${i})`);
-    console.log(`\nGen ${level} displayOrders length = `, displayOrders.length,`\ndisplayOrders = `, displayOrders);
+    devLog(`\nGen ${level} displayOrders length = `, displayOrders.length,`\ndisplayOrders = `, displayOrders);
     // 결정된 순서를 기반으로 각 노드에 고유한 display_order (0, 1, 2...) 할당
     sortedGroup.forEach((node, index) => {
       const targetNode = nodes.find(n => n.id === node.id);

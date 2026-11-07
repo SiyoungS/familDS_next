@@ -4,6 +4,7 @@ import path from 'path';
 import { resolveAnonymousNames } from '@/lib/genograms/bowen/prune-anonymous';
 import { reorderDisplayOrders } from '@/lib/genograms/bowen/reorder-nodes';
 import { calculateGenogramLayout } from '@/lib/genograms/bowen/calculator-nodes';
+import { devLog, devError } from '@/lib/dev-log';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -22,10 +23,11 @@ export async function GET() {
     const resolvedData = resolveAnonymousNames(rawData);
     const orderedData = reorderDisplayOrders(resolvedData);
     const processedData = calculateGenogramLayout(orderedData);
-    console.log('Processed Genogram Data:', JSON.stringify(processedData, null, 2));// 디버깅용 로그
+    devLog('Processed Genogram Data:', JSON.stringify(processedData, null, 2));// 디버깅용 로그
     return NextResponse.json(processedData);
   } catch (error) {
-    console.error('Data Load Error:', error);
+    console.error('Data Load Error:', error instanceof Error ? error.message : String(error));
+    devError('Data Load Error (detail):', error);
     return NextResponse.json({ error: '파일을 읽을 수 없습니다.' }, { status: 500 });
   }
 }

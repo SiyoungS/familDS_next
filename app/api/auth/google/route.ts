@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { verifyFirebaseIdToken } from '@/lib/auth/verify-firebase';
 import { setSessionCookie } from '@/lib/auth/session';
 import { upsertUserOnLogin, toPublicUser } from '@/lib/db/users';
+import { devError } from '@/lib/dev-log';
 
 export const runtime = 'nodejs';
 
@@ -40,7 +41,8 @@ export async function POST(request: Request) {
     // pending / rejected → 세션 미발급
     return NextResponse.json({ authenticated: false, user: toPublicUser(user) });
   } catch (error) {
-    console.error('auth/google error:', error);
+    console.error('auth/google error');
+    devError('auth/google error (detail):', error);
     return NextResponse.json({ error: '로그인 검증에 실패했습니다.' }, { status: 401 });
   }
 }

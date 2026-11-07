@@ -1,4 +1,5 @@
 import { BWGenogramData, PersonNode, FamilyUnit, ChildGroup } from '@/types/bowengenogram.types';
+import { devLog } from '@/lib/dev-log';
 
 interface LayoutConfig {
   nodeWidthGap: number;     // 모든 수평 노드 간격 고정 (기본 150px)
@@ -71,7 +72,7 @@ export function calculateGenogramLayout(
     const group = levelGroups[level];
     group.forEach(node => {
       node.layoutPosition = { x: 0, y: Math.round(rowY(level, node.subRow ?? 0)) };
-      console.log(`node ${node.id} relLevel ${node.relLevel} initial layoutPosition: `, node.layoutPosition);
+      devLog(`node ${node.id} relLevel ${node.relLevel} initial layoutPosition: `, node.layoutPosition);
     });
   });
   
@@ -97,7 +98,7 @@ export function calculateGenogramLayout(
       const betweenParents: PersonNode[] = parentsGroup.map((n, i) => {
         if (i > minParentIndex && i < maxParentIndex) return n;
       }).filter((v): v is NonNullable<typeof v> => !!v);
-      console.log("betweenParents: ", betweenParents.map(n => n.id));
+      devLog("betweenParents: ", betweenParents.map(n => n.id));
       betweenParents.forEach(n => {
         // 자식이 있는 경우에만 카운팅
         const otherBetweenUnit = familyUnits.filter(u =>
@@ -331,7 +332,7 @@ export function calculateGenogramLayout(
       const n = nodes.find(x => x.id === id);
       if (n) n.layoutPosition.x = Math.round(n.layoutPosition.x + delta);
     });
-    console.log(`[3-4] 연결혼 인접 보정: ${mover.name} 가문을 ${anchor.name} ${putLeft ? '좌측' : '우측'}으로 ${delta} 이동`);
+    devLog(`[3-4] 연결혼 인접 보정: ${mover.name} 가문을 ${anchor.name} ${putLeft ? '좌측' : '우측'}으로 ${delta} 이동`);
   });
 
   // ==========================================
@@ -395,7 +396,7 @@ export function calculateGenogramLayout(
     };
     placeSide(left, -1);
     placeSide(right, 1);
-    console.log(`[3-5] 다중혼 배치: ${centerNode.name} (좌${left.length}/우${right.length})`);
+    devLog(`[3-5] 다중혼 배치: ${centerNode.name} (좌${left.length}/우${right.length})`);
   });
 
   // ==========================================

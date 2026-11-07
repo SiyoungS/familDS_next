@@ -1,5 +1,6 @@
 import { GoogleGenAI } from "@google/genai";
 import type { ThinkingLevel } from "@google/genai";
+import { devLog, devError } from '@/lib/dev-log';
 
 // Gemini 호출 공용 헬퍼: 클라이언트 인스턴스 + 모델 폴백 체인 로직을 한 곳에 모은다.
 // (CallGemini / CallGeminiRelations / CallGeminiEmotions가 공통으로 사용)
@@ -76,11 +77,12 @@ export async function generateGeminiJson<T = Record<string, unknown>>({
       if (!rawContent) {
         throw new Error("Empty response from Gemini");
       }
-      console.log(`Raw response from Gemini (${model}):`, rawContent); // 디버깅용 로그
+      devLog(`Raw response from Gemini (${model}):`, rawContent); // 디버깅용 로그
 
       return JSON.parse(rawContent);
     } catch (error) {
-      console.error(`Error in ${callerName} using model ${model}:`, error);
+      console.error(`Error in ${callerName} using model ${model}:`, error instanceof Error ? error.message : String(error));
+      devError(`Error in ${callerName} using model ${model} (detail):`, error);
       if (i < GEMINI_MODEL_CHAIN.length - 1) {
         console.warn(
           `${callerName}: ${model} 실패 → 폴백 모델 ${GEMINI_MODEL_CHAIN[i + 1]}(으)로 재시도`

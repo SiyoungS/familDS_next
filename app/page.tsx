@@ -14,6 +14,7 @@ import { useHistory } from './providers/HistoryProvider';
 import GenogramCanvas from './(genograms)/GenogramCanvas';
 import RelationAnalysisCenterCard, { cardVariantsInit, cardVariants } from '@/components/RelationAnalysisCenterCard';
 import { Variants } from 'framer-motion';
+import { devError } from '@/lib/dev-log';
 
 export default function Home() {
   const router = useRouter();
@@ -88,7 +89,7 @@ export default function Home() {
         }
       })
       .catch(err => {
-        console.error(err);
+        devError(err);
         addToastMessage('가계도 생성에 실패했습니다. 다시 시도해주세요.');
       })
       .finally(() => setAnalysisStep('results'));
